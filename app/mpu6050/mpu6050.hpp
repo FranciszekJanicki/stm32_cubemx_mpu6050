@@ -43,6 +43,10 @@ namespace MPU6050 {
         [[nodiscard]] float get_pitch() const noexcept;
         [[nodiscard]] float get_yaw() const noexcept;
 
+        std::uint8_t read_byte(std::uint8_t const reg_address) const noexcept;
+
+        void write_byte(std::uint8_t const reg_address, std::uint8_t const byte) const noexcept;
+
         bool read_bit(std::uint8_t const reg_address, std::uint8_t const position) const noexcept;
 
         std::uint8_t
@@ -51,16 +55,12 @@ namespace MPU6050 {
         void write_bit(std::uint8_t const reg_address, bool const bit, std::uint8_t const position) const noexcept;
 
         void write_bits(std::uint8_t const reg_address,
-                        bool const bit,
+                        std::uint8_t const bit,
                         std::uint8_t const position,
                         std::uint8_t const size) const noexcept;
 
-        std::uint8_t read_byte(std::uint8_t const reg_address) const noexcept;
-
         void
         read_bytes(std::uint8_t const reg_address, std::uint8_t* const bytes, std::uint8_t const size) const noexcept;
-
-        void write_byte(std::uint8_t const reg_address, std::uint8_t const byte) const noexcept;
 
         void
         write_bytes(std::uint8_t const reg_address, std::uint8_t* const bytes, std::uint8_t const size) const noexcept;
