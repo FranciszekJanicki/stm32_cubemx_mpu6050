@@ -1,22 +1,31 @@
 #include "mpu6050.hpp"
-#include <cmath>
-#include <cstdint>
-#include <cstdio>
-#include <utility>
+#include "utility.hpp"
 
 namespace MPU6050 {
 
     MPU6050::MPU6050(I2CDevice&& i2c_device,
-                     std::uint32_t const sampling_rate,
-                     GyroRange const gyro_range,
-                     AccelRange const accel_range,
-                     DLPF const dlpf,
-                     DHPF const dhpf) noexcept :
+                     CONFIG const config,
+                     ACCEL_CONFIG const accel_config,
+                     GYRO_CONFIG const gyro_config,
+                     SMPLRT_DIV const smplrt_div,
+                     INT_PIN_CFG const int_pin_cfg,
+                     INT_ENABLE const int_enable,
+                     USER_CTRL const user_ctrl,
+                     PWR_MGMT_1 const pwr_mgmt_1,
+                     PWR_MGMT_2 const pwr_mgmt_2) noexcept :
         i2c_device_{std::forward<I2CDevice>(i2c_device)},
-        gyro_scale_{gyro_range_to_scale(gyro_range)},
-        accel_scale_{accel_range_to_scale(accel_range)}
+        accel_scale_{accel_range_to_scale((AccelRange)accel_config.afs_sel)},
+        gyro_scale_{gyro_range_to_scale((GyroRange)gyro_config.fs_sel)}
     {
-        this->initialize(sampling_rate, gyro_range, accel_range, dlpf, dhpf);
+        this->initialize(config,
+                         accel_config,
+                         gyro_config,
+                         smplrt_div,
+                         int_pin_cfg,
+                         int_enable,
+                         user_ctrl,
+                         pwr_mgmt_1,
+                         pwr_mgmt_2);
     }
 
     MPU6050::~MPU6050() noexcept
@@ -24,69 +33,150 @@ namespace MPU6050 {
         this->deinitialize();
     }
 
-    float MPU6050::get_temperature_celsius() const noexcept
+    std::optional<Vec3D<float>> MPU6050::get_acceleration_scaled() const noexcept
     {
-        return static_cast<float>(this->get_temperature_raw()) / 340.0F + 36.53F;
+        return this->get_acceleration_raw().transform(
+            [this](Vec3D<std::int16_t> const& raw) { return static_cast<Vec3D<float>>(raw) / this->accel_scale_; });
     }
 
-    float MPU6050::get_acceleration_x_scaled() const noexcept
+    std::optional<float> MPU6050::get_acceleration_x_scaled() const noexcept
     {
-        return static_cast<float>(this->get_acceleration_x_raw()) / this->accel_scale_;
+        return this->get_acceleration_x_raw().transform(
+            [this](std::int16_t const raw) { return static_cast<float>(raw) / this->accel_scale_; });
     }
 
-    float MPU6050::get_acceleration_y_scaled() const noexcept
+    std::optional<float> MPU6050::get_acceleration_y_scaled() const noexcept
     {
-        return static_cast<float>(this->get_acceleration_y_raw()) / this->accel_scale_;
+        return this->get_acceleration_y_raw().transform(
+            [this](std::int16_t const raw) { return static_cast<float>(raw) / this->accel_scale_; });
     }
 
-    float MPU6050::get_acceleration_z_scaled() const noexcept
+    std::optional<float> MPU6050::get_acceleration_z_scaled() const noexcept
     {
-        return static_cast<float>(this->get_acceleration_z_raw()) / this->accel_scale_;
+        return this->get_acceleration_z_raw().transform(
+            [this](std::int16_t const raw) { return static_cast<float>(raw) / this->accel_scale_; });
     }
 
-    Vec3D<float> MPU6050::get_acceleration_scaled() const noexcept
+    std::optional<float> MPU6050::get_temperature_celsius() const noexcept
     {
-        return static_cast<Vec3D<float>>(this->get_acceleration_raw()) / this->accel_scale_;
+        return this->get_temperature_raw().transform(
+            [this](std::int16_t const raw) { return static_cast<float>(raw) / 340.0F + 36.53F; });
     }
 
-    float MPU6050::get_rotation_x_scaled() const noexcept
+    std::optional<Vec3D<float>> MPU6050::get_rotation_scaled() const noexcept
     {
-        return static_cast<float>(this->get_rotation_x_raw()) / this->gyro_scale_;
+        return this->get_rotation_raw().transform(
+            [this](Vec3D<std::int16_t> const& raw) { return static_cast<Vec3D<float>>(raw) / this->gyro_scale_; });
     }
 
-    float MPU6050::get_rotation_y_scaled() const noexcept
+    std::optional<float> MPU6050::get_rotation_x_scaled() const noexcept
     {
-        return static_cast<float>(this->get_rotation_y_raw()) / this->gyro_scale_;
+        return this->get_rotation_x_raw().transform(
+            [this](std::int16_t const raw) { return static_cast<float>(raw) / this->gyro_scale_; });
     }
 
-    float MPU6050::get_rotation_z_scaled() const noexcept
+    std::optional<float> MPU6050::get_rotation_y_scaled() const noexcept
     {
-        return static_cast<float>(this->get_rotation_z_raw()) / this->gyro_scale_;
+        return this->get_rotation_y_raw().transform(
+            [this](std::int16_t const raw) { return static_cast<float>(raw) / this->gyro_scale_; });
     }
 
-    Vec3D<float> MPU6050::get_rotation_scaled() const noexcept
+    std::optional<float> MPU6050::get_rotation_z_scaled() const noexcept
     {
-        return static_cast<Vec3D<float>>(this->get_rotation_raw()) / this->gyro_scale_;
+        return this->get_rotation_z_raw().transform(
+            [this](std::int16_t const raw) { return static_cast<float>(raw) / this->gyro_scale_; });
     }
 
-    Vec3D<float> MPU6050::get_roll_pitch_yaw() const noexcept
+    std::optional<Vec3D<float>> MPU6050::get_roll_pitch_yaw() const noexcept
     {
-        return accel_to_roll_pitch_yaw(this->get_acceleration_scaled());
+        return this->get_acceleration_scaled().transform([](Vec3D<float> const& accel) {
+            return Vec3D<float>{std::atan2(accel.y, accel.z),
+                                -std::atan2(accel.x, std::sqrt(accel.y * accel.y + accel.z * accel.z)),
+                                0.0F};
+        });
     }
 
-    float MPU6050::get_roll() const noexcept
+    std::optional<float> MPU6050::get_roll() const noexcept
     {
-        return accel_to_roll(this->get_acceleration_scaled());
+        return this->get_acceleration_scaled().transform(
+            [](Vec3D<float> const& accel) { return std::atan2(accel.y, accel.z); });
     }
 
-    float MPU6050::get_pitch() const noexcept
+    std::optional<float> MPU6050::get_pitch() const noexcept
     {
-        return accel_to_pitch(this->get_acceleration_scaled());
+        return this->get_acceleration_scaled().transform([](Vec3D<float> const& accel) {
+            return -std::atan2(accel.x, std::sqrt(accel.y * accel.y + accel.z * accel.z));
+        });
     }
 
-    float MPU6050::get_yaw() const noexcept
+    std::optional<float> MPU6050::get_yaw() const noexcept
     {
-        return accel_to_yaw(this->get_acceleration_scaled());
+        return this->get_acceleration_scaled().transform([](Vec3D<float> const& accel) { return 0.0F; });
+    }
+
+    std::uint8_t MPU6050::read_byte(std::uint8_t const reg_address) const noexcept
+    {
+        return this->i2c_device_.read_byte(reg_address);
+    }
+
+    void MPU6050::write_byte(std::uint8_t const reg_address, std::uint8_t const byte) const noexcept
+    {
+        this->i2c_device_.write_byte(reg_address, byte);
+    }
+
+    bool MPU6050::read_bit(std::uint8_t const reg_address, std::uint8_t const position) const noexcept
+    {
+        return Utility::read_bit(this->read_byte(reg_address), position);
+    }
+
+    std::uint8_t MPU6050::read_bits(std::uint8_t const reg_address,
+                                    std::uint8_t const position,
+                                    std::uint8_t const size) const noexcept
+    {
+        return Utility::read_bits(this->read_byte(reg_address), size, position);
+    }
+
+    void MPU6050::write_bit(std::uint8_t const reg_address, bool const bit, std::uint8_t const position) const noexcept
+    {
+        auto byte = this->read_byte(reg_address);
+        Utility::write_bit(byte, bit, position);
+        this->write_byte(reg_address, byte);
+    }
+
+    void MPU6050::write_bits(std::uint8_t const reg_address,
+                             std::uint8_t const bits,
+                             std::uint8_t const position,
+                             std::uint8_t const size) const noexcept
+    {
+        auto byte = this->read_byte(reg_address);
+        Utility::write_bits(byte, bits, size, position);
+        this->write_byte(reg_address, byte);
+    }
+
+    void MPU6050::read_bytes(std::uint8_t const reg_address,
+                             std::uint8_t* const bytes,
+                             std::uint8_t const size) const noexcept
+    {
+        this->i2c_device_.read_bytes(reg_address, bytes, size);
+    }
+
+    void MPU6050::write_bytes(std::uint8_t const reg_address,
+                              std::uint8_t* const bytes,
+                              std::uint8_t const size) const noexcept
+    {
+        this->i2c_device_.write_bytes(reg_address, bytes, size);
+    }
+
+    void MPU6050::device_reset() const noexcept
+    {
+        this->set_pwr_mgmt_1_register(std::bit_cast<PWR_MGMT_1>(std::uint8_t{0b10000000}));
+        HAL_Delay(200);
+    }
+
+    void MPU6050::device_wake_up() const noexcept
+    {
+        this->set_pwr_mgmt_1_register(std::bit_cast<PWR_MGMT_1>(std::uint8_t{0b10000000}));
+        HAL_Delay(200);
     }
 
     bool MPU6050::is_valid_device_id() const noexcept
@@ -94,81 +184,35 @@ namespace MPU6050 {
         return this->get_device_id() == this->i2c_device_.dev_address();
     }
 
-    void MPU6050::initialize(std::uint32_t const sampling_rate,
-                             GyroRange const gyro_range,
-                             AccelRange const accel_range,
-                             DLPF const dlpf,
-                             DHPF const dhpf) noexcept
+    std::uint8_t MPU6050::get_device_id() const noexcept
+    {
+        return std::bit_cast<std::uint8_t>(this->get_who_am_i_register());
+    }
+
+    void MPU6050::initialize(CONFIG const config,
+                             ACCEL_CONFIG const accel_config,
+                             GYRO_CONFIG const gyro_config,
+                             SMPLRT_DIV const smplrt_div,
+                             INT_PIN_CFG const int_pin_cfg,
+                             INT_ENABLE const int_enable,
+                             USER_CTRL const user_ctrl,
+                             PWR_MGMT_1 const pwr_mgmt_1,
+                             PWR_MGMT_2 const pwr_mgmt_2) noexcept
     {
         if (this->is_valid_device_id()) {
+            this->device_reset();
             this->device_wake_up();
-            HAL_Delay(200);
-            this->initialize_base(gyro_range, accel_range);
-            this->initialize_advanced(sampling_rate, dlpf, dhpf);
-            this->initialize_interrupt();
+            this->set_config_register(config);
+            this->set_accel_config_register(accel_config);
+            this->set_gyro_config_register(gyro_config);
+            this->set_smplrt_div_register(smplrt_div);
+            this->set_int_pin_cfg_register(int_pin_cfg);
+            this->set_int_enable_register(int_enable);
+            this->set_user_ctrl_register(user_ctrl);
+            this->set_pwr_mgmt_1_register(pwr_mgmt_1);
+            this->set_pwr_mgmt_2_register(pwr_mgmt_2);
             this->initialized_ = true;
         }
-    }
-
-    void MPU6050::initialize_base(GyroRange const gyro_range, AccelRange const accel_range) const noexcept
-    {
-        this->set_clock_source(Clock::PLL_ZGYRO);
-        this->set_full_scale_gyro_range(gyro_range);
-        this->set_full_scale_accel_range(accel_range);
-        this->set_sleep_enabled(false);
-    }
-
-    void
-    MPU6050::initialize_advanced(std::uint32_t const sampling_rate, DLPF const dlpf, DHPF const dhpf) const noexcept
-    {
-        this->set_sampling_rate(sampling_rate, dlpf);
-        this->set_dlpf_mode(dlpf);
-        this->set_dhpf_mode(dhpf);
-        this->set_external_frame_sync(ExtSync::TEMP_OUT_L);
-    }
-
-    void MPU6050::initialize_interrupt() const noexcept
-    {
-        this->initialize_f_sync_interrupt();
-        this->initialize_data_ready_interrupt();
-        this->initialize_motion_interrupt();
-    }
-
-    void MPU6050::initialize_f_sync_interrupt() const noexcept
-    {
-        this->set_f_sync_interrupt_mode(IntMode::ACTIVEHIGH);
-        this->set_f_sync_interrupt_enabled(true);
-    }
-
-    void MPU6050::initialize_data_ready_interrupt() const noexcept
-    {
-        this->set_interrupt_latch(IntLatch::PULSE50US);
-        this->set_interrupt_latch_clear(IntClear::STATUSREAD);
-        this->set_interrupt_drive(IntDrive::PUSHPULL);
-        this->set_interrupt_mode(IntMode::ACTIVEHIGH);
-        // this->set_int_data_ready_enabled(true);
-    }
-
-    void MPU6050::initialize_motion_interrupt() const noexcept
-    {
-        this->set_motion_detection_duration(80);
-        this->set_motion_detection_threshold(2);
-        this->set_motion_detection_control(0x15);
-        // this->set_int_motion_enabled(true);
-    }
-
-    void MPU6050::initialize_zero_motion_interrupt() const noexcept
-    {
-        this->set_zero_motion_detection_duration(0);
-        this->set_zero_motion_detection_threshold(156);
-        // this->set_int_zero_motion_enabled(true);
-    }
-
-    void MPU6050::initialize_free_fall_interrupt() const noexcept
-    {
-        this->set_free_fall_detection_duration(2);
-        this->set_free_fall_detection_threshold(5);
-        this->set_int_free_fall_enabled(true);
     }
 
     void MPU6050::deinitialize() noexcept
@@ -179,735 +223,651 @@ namespace MPU6050 {
         }
     }
 
-    void MPU6050::set_sampling_rate(std::uint8_t const sampling_rate, DLPF const dlpf) const noexcept
+    std::optional<Vec3D<std::int16_t>> MPU6050::get_acceleration_raw() const noexcept
     {
-        this->write_byte(std::to_underlying(RA::SMPLRT_DIV), get_sampling_divider(sampling_rate, dlpf));
+        return this->initialized_ ? std::optional<Vec3D<std::int16_t>>{std::bit_cast<Vec3D<std::int16_t>>(
+                                        this->get_accel_out_registers())}
+                                  : std::optional<Vec3D<std::int16_t>>{std::nullopt};
     }
 
-    void MPU6050::set_external_frame_sync(ExtSync const frame_sync) const noexcept
+    std::optional<std::int16_t> MPU6050::get_acceleration_x_raw() const noexcept
     {
-        this->write_bits(std::to_underlying(RA::CONFIG),
-                         std::to_underlying(frame_sync),
-                         std::to_underlying(CONFIG::EXT_SYNC_SET_BIT),
-                         std::to_underlying(CONFIG::EXT_SYNC_SET_LENGTH));
+        return this->initialized_
+                   ? std::optional<std::int16_t>{std::bit_cast<std::int16_t>(this->get_accel_xout_registers())}
+                   : std::optional<std::int16_t>{std::nullopt};
     }
 
-    void MPU6050::set_dlpf_mode(DLPF const dlpf) const noexcept
+    std::optional<std::int16_t> MPU6050::get_acceleration_y_raw() const noexcept
     {
-        this->write_bits(std::to_underlying(RA::CONFIG),
-                         std::to_underlying(dlpf),
-                         std::to_underlying(CONFIG::DLPF_CFG_BIT),
-                         std::to_underlying(CONFIG::DLPF_CFG_LENGTH));
+        return this->initialized_
+                   ? std::optional<std::int16_t>{std::bit_cast<std::int16_t>(this->get_accel_yout_registers())}
+                   : std::optional<std::int16_t>{std::nullopt};
     }
 
-    void MPU6050::set_full_scale_gyro_range(GyroRange const range) const noexcept
+    std::optional<std::int16_t> MPU6050::get_acceleration_z_raw() const noexcept
     {
-        this->write_bits(std::to_underlying(RA::GYRO_CONFIG),
-                         std::to_underlying(range),
-                         std::to_underlying(GYRO_CONFIG::FS_SEL_BIT),
-                         std::to_underlying(GYRO_CONFIG::FS_SEL_LENGTH));
+        return this->initialized_
+                   ? std::optional<std::int16_t>{std::bit_cast<std::int16_t>(this->get_accel_zout_registers())}
+                   : std::optional<std::int16_t>{std::nullopt};
     }
 
-    void MPU6050::set_full_scale_accel_range(AccelRange const range) const noexcept
+    std::optional<std::int16_t> MPU6050::get_temperature_raw() const noexcept
     {
-        this->write_bits(std::to_underlying(RA::ACCEL_CONFIG),
-                         std::to_underlying(range),
-                         std::to_underlying(ACCEL_CONFIG::AFS_SEL_BIT),
-                         std::to_underlying(ACCEL_CONFIG::AFS_SEL_LENGTH));
+        return this->initialized_
+                   ? std::optional<std::int16_t>{std::bit_cast<std::int16_t>(this->get_temp_out_registers())}
+                   : std::optional<std::int16_t>{std::nullopt};
     }
 
-    void MPU6050::set_dhpf_mode(DHPF const dhpf) const noexcept
+    std::optional<Vec3D<std::int16_t>> MPU6050::get_rotation_raw() const noexcept
     {
-        this->write_bits(std::to_underlying(RA::ACCEL_CONFIG),
-                         std::to_underlying(dhpf),
-                         std::to_underlying(ACCEL_CONFIG::ACCEL_HPF_BIT),
-                         std::to_underlying(ACCEL_CONFIG::ACCEL_HPF_LENGTH));
+        return this->initialized_ ? std::optional<Vec3D<std::int16_t>>{std::bit_cast<Vec3D<std::int16_t>>(
+                                        this->get_gyro_out_registers())}
+                                  : std::optional<Vec3D<std::int16_t>>{std::nullopt};
     }
 
-    void MPU6050::set_free_fall_detection_threshold(std::uint8_t const threshold) const noexcept
+    std::optional<std::int16_t> MPU6050::get_rotation_x_raw() const noexcept
     {
-        this->write_byte(std::to_underlying(RA::FF_THR), threshold);
+        return this->initialized_
+                   ? std::optional<std::int16_t>{std::bit_cast<std::int16_t>(this->get_gyro_xout_registers())}
+                   : std::optional<std::int16_t>{std::nullopt};
     }
 
-    void MPU6050::set_free_fall_detection_duration(std::uint8_t const duration) const noexcept
+    std::optional<std::int16_t> MPU6050::get_rotation_y_raw() const noexcept
     {
-        this->write_byte(std::to_underlying(RA::FF_DUR), duration);
+        return this->initialized_
+                   ? std::optional<std::int16_t>{std::bit_cast<std::int16_t>(this->get_gyro_yout_registers())}
+                   : std::optional<std::int16_t>{std::nullopt};
     }
 
-    void MPU6050::set_motion_detection_threshold(std::uint8_t const threshold) const noexcept
+    std::optional<std::int16_t> MPU6050::get_rotation_z_raw() const noexcept
     {
-        this->write_byte(std::to_underlying(RA::MOT_THR), threshold);
+        return this->initialized_
+                   ? std::optional<std::int16_t>{std::bit_cast<std::int16_t>(this->get_gyro_zout_registers())}
+                   : std::optional<std::int16_t>{std::nullopt};
     }
 
-    void MPU6050::set_motion_detection_duration(std::uint8_t const duration) const noexcept
+    void MPU6050::set_xg_offs_tc_register(XG_OFFS_TC const xg_offs_tc) const noexcept
     {
-        this->write_byte(std::to_underlying(RA::MOT_DUR), duration);
+        this->i2c_device_.write_byte(std::to_underlying(RA::XG_OFFS_TC), std::bit_cast<std::uint8_t>(xg_offs_tc));
     }
 
-    void MPU6050::set_zero_motion_detection_threshold(std::uint8_t const threshold) const noexcept
+    XG_OFFS_TC MPU6050::get_xg_offs_tc_register() const noexcept
     {
-        this->write_byte(std::to_underlying(RA::ZRMOT_THR), threshold);
+        return std::bit_cast<XG_OFFS_TC>(this->i2c_device_.read_byte(std::to_underlying(RA::XG_OFFS_TC)));
     }
 
-    void MPU6050::set_zero_motion_detection_duration(std::uint8_t const duration) const noexcept
+    void MPU6050::set_yg_offs_tc_register(YG_OFFS_TC const yg_offs_tc) const noexcept
     {
-        this->write_byte(std::to_underlying(RA::ZRMOT_DUR), duration);
+        this->i2c_device_.write_byte(std::to_underlying(RA::YG_OFFS_TC), std::bit_cast<std::uint8_t>(yg_offs_tc));
     }
 
-    void MPU6050::set_fifo_enabled(std::uint8_t const fifo_enabled) const noexcept
+    YG_OFFS_TC MPU6050::get_yg_offs_tc_register() const noexcept
     {
-        this->write_byte(std::to_underlying(RA::FIFO_EN), fifo_enabled);
+        return std::bit_cast<YG_OFFS_TC>(this->i2c_device_.read_byte(std::to_underlying(RA::YG_OFFS_TC)));
     }
 
-    void MPU6050::set_temp_fifo_enabled(bool const enabled) const noexcept
+    void MPU6050::set_zg_offs_tc_register(ZG_OFFS_TC const zg_offs_tc) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::FIFO_EN), enabled, std::to_underlying(FIFO::TEMP_EN_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::ZG_OFFS_TC), std::bit_cast<std::uint8_t>(zg_offs_tc));
     }
 
-    void MPU6050::set_x_gyro_fifo_enabled(bool const enabled) const noexcept
+    ZG_OFFS_TC MPU6050::get_zg_offs_tc_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::FIFO_EN), enabled, std::to_underlying(FIFO::XG_EN_BIT));
+        return std::bit_cast<ZG_OFFS_TC>(this->i2c_device_.read_byte(std::to_underlying(RA::ZG_OFFS_TC)));
     }
 
-    void MPU6050::set_y_gyro_fifo_enabled(bool const enabled) const noexcept
+    void MPU6050::set_x_fine_gain_register(X_FINE_GAIN const x_fine_gain) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::FIFO_EN), enabled, std::to_underlying(FIFO::YG_EN_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::X_FINE_GAIN), std::bit_cast<std::uint8_t>(x_fine_gain));
     }
 
-    void MPU6050::set_z_gyro_fifo_enabled(bool const enabled) const noexcept
+    X_FINE_GAIN MPU6050::get_x_fine_gain_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::FIFO_EN), enabled, std::to_underlying(FIFO::ZG_EN_BIT));
+        return std::bit_cast<X_FINE_GAIN>(this->i2c_device_.read_byte(std::to_underlying(RA::X_FINE_GAIN)));
     }
 
-    void MPU6050::set_accel_fifo_enabled(bool const enabled) const noexcept
+    void MPU6050::set_y_fine_gain_register(Y_FINE_GAIN const y_fine_gain) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::FIFO_EN), enabled, std::to_underlying(FIFO::ACCEL_EN_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::Y_FINE_GAIN), std::bit_cast<std::uint8_t>(y_fine_gain));
     }
 
-    void MPU6050::set_slave2_fifo_enabled(bool const enabled) const noexcept
+    Y_FINE_GAIN MPU6050::get_y_fine_gain_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::FIFO_EN), enabled, std::to_underlying(FIFO::SLV2_EN_BIT));
+        return std::bit_cast<Y_FINE_GAIN>(this->i2c_device_.read_byte(std::to_underlying(RA::Y_FINE_GAIN)));
     }
 
-    void MPU6050::set_slave1_fifo_enabled(bool const enabled) const noexcept
+    void MPU6050::set_z_fine_gain_register(Z_FINE_GAIN const z_fine_gain) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::FIFO_EN), enabled, std::to_underlying(FIFO::SLV1_EN_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::Z_FINE_GAIN), std::bit_cast<std::uint8_t>(z_fine_gain));
     }
 
-    void MPU6050::set_slave0_fifo_enabled(bool const enabled) const noexcept
+    Z_FINE_GAIN MPU6050::get_z_fine_gain_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::FIFO_EN), enabled, std::to_underlying(FIFO::SLV0_EN_BIT));
+        return std::bit_cast<Z_FINE_GAIN>(this->i2c_device_.read_byte(std::to_underlying(RA::Z_FINE_GAIN)));
     }
 
-    void MPU6050::set_multi_master_enabled(bool const enabled) const noexcept
+    void MPU6050::set_xa_offs_registers(XA_OFFS const xa_offs) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::I2C_MST_CTRL),
-                        enabled,
-                        std::to_underlying(I2C_MST_CTRL::MULT_MST_EN_BIT));
+        this->i2c_device_.write_bytes(std::to_underlying(RA::XA_OFFS_H),
+                                      std::bit_cast<std::array<std::uint8_t, sizeof(XA_OFFS)>>(xa_offs));
     }
 
-    void MPU6050::set_wait_for_external_sensor_enabled(bool const enabled) const noexcept
+    XA_OFFS MPU6050::get_xa_offs_registers() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::I2C_MST_CTRL),
-                        enabled,
-                        std::to_underlying(I2C_MST_CTRL::WAIT_FOR_ES_BIT));
+        return std::bit_cast<XA_OFFS>(this->i2c_device_.read_bytes<sizeof(XA_OFFS)>(std::to_underlying(RA::XA_OFFS_H)));
     }
 
-    void MPU6050::set_slave3_fifo_enabled(bool const enabled) const noexcept
+    void MPU6050::set_ya_offs_registers(YA_OFFS const ya_offs) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::I2C_MST_CTRL), enabled, std::to_underlying(I2C_SLV::SLV_3_FIFO_EN_BIT));
+        this->i2c_device_.write_bytes(std::to_underlying(RA::YA_OFFS_H),
+                                      std::bit_cast<std::array<std::uint8_t, sizeof(YA_OFFS)>>(ya_offs));
     }
 
-    void MPU6050::set_slave_read_write_transition_enabled(bool const enabled) const noexcept
+    YA_OFFS MPU6050::get_ya_offs_registers() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::I2C_MST_CTRL), enabled, std::to_underlying(I2C_MST_CTRL::MST_P_NSR_BIT));
+        return std::bit_cast<YA_OFFS>(this->i2c_device_.read_bytes<sizeof(YA_OFFS)>(std::to_underlying(RA::YA_OFFS_H)));
     }
 
-    void MPU6050::set_master_clock_speed(std::uint8_t const speed) const noexcept
+    void MPU6050::set_za_offs_registers(ZA_OFFS const za_offs) const noexcept
     {
-        this->write_bits(std::to_underlying(RA::I2C_MST_CTRL),
-                         speed,
-                         std::to_underlying(I2C_MST_CTRL::MST_CLK_BIT),
-                         std::to_underlying(I2C_MST_CTRL::MST_CLK_LENGTH));
+        this->i2c_device_.write_bytes(std::to_underlying(RA::ZA_OFFS_H),
+                                      std::bit_cast<std::array<std::uint8_t, sizeof(ZA_OFFS)>>(za_offs));
     }
 
-    void MPU6050::set_slave_address(std::uint8_t const num, std::uint8_t const address) const noexcept
+    ZA_OFFS MPU6050::get_za_offs_registers() const noexcept
     {
-        this->write_byte(std::to_underlying(RA::I2C_SLV0_ADDR) + num, address);
+        return std::bit_cast<ZA_OFFS>(this->i2c_device_.read_bytes<sizeof(ZA_OFFS)>(std::to_underlying(RA::ZA_OFFS_H)));
     }
 
-    void MPU6050::set_slave_register(std::uint8_t const num, std::uint8_t const reg) const noexcept
+    void MPU6050::set_xg_offs_usr_registers(XG_OFFS_USR const xg_offs_usr) const noexcept
     {
-        this->write_byte(std::to_underlying(RA::I2C_SLV0_REG) + num, reg);
+        this->i2c_device_.write_bytes(std::to_underlying(RA::XG_OFFS_USRH),
+                                      std::bit_cast<std::array<std::uint8_t, sizeof(XG_OFFS_USR)>>(xg_offs_usr));
     }
 
-    void MPU6050::set_slave_enabled(std::uint8_t const num, bool const enabled) const noexcept
+    XG_OFFS_USR MPU6050::get_xg_offs_usr_registers() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::I2C_SLV0_CTRL) + num, enabled, std::to_underlying(I2C_SLV::SLV_EN_BIT));
+        return std::bit_cast<XG_OFFS_USR>(
+            this->i2c_device_.read_bytes<sizeof(XG_OFFS_USR)>(std::to_underlying(RA::XG_OFFS_USRH)));
     }
 
-    void MPU6050::set_slave_word_byte_swap(std::uint8_t const num, bool const enabled) const noexcept
+    void MPU6050::set_yg_offs_usr_registers(YG_OFFS_USR const yg_offs_usr) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::I2C_SLV0_CTRL) + num, enabled, std::to_underlying(I2C_SLV::SLV_SW_BIT));
+        this->i2c_device_.write_bytes(std::to_underlying(RA::YG_OFFS_USRH),
+                                      std::bit_cast<std::array<std::uint8_t, sizeof(YG_OFFS_USR)>>(yg_offs_usr));
     }
 
-    void MPU6050::set_slave_write_mode(std::uint8_t const num, bool const mode) const noexcept
+    YG_OFFS_USR MPU6050::get_yg_offs_usr_registers() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::I2C_SLV0_CTRL) + num,
-                        mode,
-                        std::to_underlying(I2C_SLV::SLV_REG_DIS_BIT));
+        return std::bit_cast<YG_OFFS_USR>(
+            this->i2c_device_.read_bytes<sizeof(YG_OFFS_USR)>(std::to_underlying(RA::YG_OFFS_USRH)));
     }
 
-    void MPU6050::set_slave_word_group_offset(std::uint8_t const num, bool const enabled) const noexcept
+    void MPU6050::set_zg_offs_usr_registers(ZG_OFFS_USR const zg_offs_usr) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::I2C_SLV0_CTRL) + num, enabled, std::to_underlying(I2C_SLV::SLV_GRP_BIT));
+        this->i2c_device_.write_bytes(std::to_underlying(RA::ZG_OFFS_USRH),
+                                      std::bit_cast<std::array<std::uint8_t, sizeof(ZG_OFFS_USR)>>(zg_offs_usr));
     }
 
-    void MPU6050::set_slave_data_length(std::uint8_t const num, std::uint8_t const length) const noexcept
+    ZG_OFFS_USR MPU6050::get_zg_offs_usr_register() const noexcept
     {
-        this->write_bits(std::to_underlying(RA::I2C_SLV0_CTRL) + num,
-                         length,
-                         std::to_underlying(I2C_SLV::SLV_LEN_BIT),
-                         std::to_underlying(I2C_SLV::SLV_LEN_LENGTH));
+        return std::bit_cast<ZG_OFFS_USR>(
+            this->i2c_device_.read_bytes<sizeof(ZG_OFFS_USR)>(std::to_underlying(RA::ZG_OFFS_USRH)));
     }
 
-    void MPU6050::set_slave4_address(std::uint8_t const address) const noexcept
+    void MPU6050::set_self_test_x_register(SELF_TEST_X const self_test_x) const noexcept
     {
-        this->write_byte(std::to_underlying(RA::I2C_SLV4_ADDR), address);
+        this->i2c_device_.write_byte(std::to_underlying(RA::SELF_TEST_X), std::bit_cast<std::uint8_t>(self_test_x));
     }
 
-    void MPU6050::set_slave4_register(std::uint8_t const reg) const noexcept
+    SELF_TEST_X MPU6050::get_self_test_x_register() const noexcept
     {
-        this->write_byte(std::to_underlying(RA::I2C_SLV4_REG), reg);
+        return std::bit_cast<SELF_TEST_X>(this->i2c_device_.read_byte(std::to_underlying(RA::SELF_TEST_X)));
     }
 
-    void MPU6050::set_slave4_output_byte(std::uint8_t const data) const noexcept
+    void MPU6050::set_self_test_y_register(SELF_TEST_Y const self_test_y) const noexcept
     {
-        this->write_byte(std::to_underlying(RA::I2C_SLV4_DO), data);
+        this->i2c_device_.write_byte(std::to_underlying(RA::SELF_TEST_Y), std::bit_cast<std::uint8_t>(self_test_y));
     }
 
-    void MPU6050::set_slave4_enabled(bool const enabled) const noexcept
+    SELF_TEST_Y MPU6050::get_self_test_y_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::I2C_SLV4_CTRL), enabled, std::to_underlying(I2C_SLV4::SLV4_EN_BIT));
+        return std::bit_cast<SELF_TEST_Y>(this->i2c_device_.read_byte(std::to_underlying(RA::SELF_TEST_Y)));
     }
 
-    void MPU6050::set_slave4_interrupt_enabled(bool const enabled) const noexcept
+    void MPU6050::set_self_test_z_register(SELF_TEST_Z const self_test_z) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::I2C_SLV4_CTRL), enabled, std::to_underlying(I2C_SLV4::SLV4_INT_EN_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::SELF_TEST_Z), std::bit_cast<std::uint8_t>(self_test_z));
     }
 
-    void MPU6050::set_slave4_write_mode(bool const mode) const noexcept
+    SELF_TEST_Z MPU6050::get_self_test_z_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::I2C_SLV4_ADDR), mode, std::to_underlying(I2C_SLV4::SLV4_REG_DIS_BIT));
+        return std::bit_cast<SELF_TEST_Z>(this->i2c_device_.read_byte(std::to_underlying(RA::SELF_TEST_Z)));
     }
 
-    void MPU6050::set_slave4_master_delay(std::uint8_t const delay) const noexcept
+    void MPU6050::set_self_test_a_register(SELF_TEST_A const self_test_a) const noexcept
     {
-        this->write_bits(std::to_underlying(RA::I2C_SLV4_ADDR),
-                         delay,
-                         std::to_underlying(I2C_SLV4::SLV4_MST_DLY_BIT),
-                         std::to_underlying(I2C_SLV4::SLV4_MST_DLY_LENGTH));
+        this->i2c_device_.write_byte(std::to_underlying(RA::SELF_TEST_A), std::bit_cast<std::uint8_t>(self_test_a));
     }
 
-    std::uint8_t MPU6050::get_slave4_input_byte() const noexcept
+    SELF_TEST_A MPU6050::get_self_test_a_register() const noexcept
     {
-        return this->read_byte(std::to_underlying(RA::I2C_SLV4_DI));
+        return std::bit_cast<SELF_TEST_A>(this->i2c_device_.read_byte(std::to_underlying(RA::SELF_TEST_A)));
     }
 
-    bool MPU6050::get_passthrough_status() const noexcept
+    void MPU6050::set_smplrt_div_register(SMPLRT_DIV const smplrt_div) const noexcept
     {
-        return this->read_bit(std::to_underlying(RA::I2C_MST_STATUS),
-                              std::to_underlying(I2C_MST_STATUS::PASS_THROUGH_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::SMPLRT_DIV), std::bit_cast<std::uint8_t>(smplrt_div));
     }
 
-    bool MPU6050::get_slave4_is_done() const noexcept
+    SMPLRT_DIV MPU6050::get_smplrt_div_register() const noexcept
     {
-        return this->read_bit(std::to_underlying(RA::I2C_MST_STATUS),
-                              std::to_underlying(I2C_MST_STATUS::SLV4_DONE_BIT));
+        return std::bit_cast<SMPLRT_DIV>(this->i2c_device_.read_byte(std::to_underlying(RA::SMPLRT_DIV)));
     }
 
-    bool MPU6050::get_lost_arbitration() const noexcept
+    void MPU6050::set_config_register(CONFIG const config) const noexcept
     {
-        return this->read_bit(std::to_underlying(RA::I2C_MST_STATUS), std::to_underlying(I2C_MST_STATUS::LOST_ARB_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::CONFIG), std::bit_cast<std::uint8_t>(config));
     }
 
-    bool MPU6050::get_slave4_nack() const noexcept
+    CONFIG MPU6050::get_config_register() const noexcept
     {
-        return this->read_bit(std::to_underlying(RA::I2C_MST_STATUS),
-                              std::to_underlying(I2C_MST_STATUS::SLV4_NACK_BIT));
+        return std::bit_cast<CONFIG>(this->i2c_device_.read_byte(std::to_underlying(RA::CONFIG)));
     }
 
-    bool MPU6050::get_slave3_nack() const noexcept
+    void MPU6050::set_gyro_config_register(GYRO_CONFIG const gyro_config) const noexcept
     {
-        return this->read_bit(std::to_underlying(RA::I2C_MST_STATUS),
-                              std::to_underlying(I2C_MST_STATUS::SLV3_NACK_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::GYRO_CONFIG), std::bit_cast<std::uint8_t>(gyro_config));
     }
 
-    bool MPU6050::get_slave2_nack() const noexcept
+    GYRO_CONFIG MPU6050::get_gyro_config_register() const noexcept
     {
-        return this->read_bit(std::to_underlying(RA::I2C_MST_STATUS),
-                              std::to_underlying(I2C_MST_STATUS::SLV2_NACK_BIT));
+        return std::bit_cast<GYRO_CONFIG>(this->i2c_device_.read_byte(std::to_underlying(RA::GYRO_CONFIG)));
     }
 
-    bool MPU6050::get_slave1_nack() const noexcept
+    void MPU6050::set_accel_config_register(ACCEL_CONFIG const accel_config) const noexcept
     {
-        return this->read_bit(std::to_underlying(RA::I2C_MST_STATUS),
-                              std::to_underlying(I2C_MST_STATUS::SLV1_NACK_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::ACCEL_CONFIG), std::bit_cast<std::uint8_t>(accel_config));
     }
 
-    bool MPU6050::get_slave0_nack() const noexcept
+    ACCEL_CONFIG MPU6050::get_accel_config_register() const noexcept
     {
-        return this->read_bit(std::to_underlying(RA::I2C_MST_STATUS),
-                              std::to_underlying(I2C_MST_STATUS::SLV0_NACK_BIT));
+        return std::bit_cast<ACCEL_CONFIG>(this->i2c_device_.read_byte(std::to_underlying(RA::ACCEL_CONFIG)));
     }
 
-    void MPU6050::set_interrupt(std::uint8_t const interrupt) const noexcept
+    void MPU6050::set_ff_thr_register(FF_THR const ff_thr) const noexcept
     {
-        this->write_byte(std::to_underlying(RA::INT_PIN_CFG), interrupt);
+        this->i2c_device_.write_byte(std::to_underlying(RA::FF_THR), std::bit_cast<std::uint8_t>(ff_thr));
     }
 
-    void MPU6050::set_interrupt_mode(IntMode const mode) const noexcept
+    FF_THR MPU6050::get_ff_thr_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::INT_PIN_CFG),
-                        std::to_underlying(mode),
-                        std::to_underlying(INT_PIN_CFG::INT_LEVEL_BIT));
+        return std::bit_cast<FF_THR>(this->i2c_device_.read_byte(std::to_underlying(RA::FF_THR)));
     }
 
-    void MPU6050::set_interrupt_drive(IntDrive const drive) const noexcept
+    void MPU6050::set_ff_dur_register(FF_DUR const ff_dur) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::INT_PIN_CFG),
-                        std::to_underlying(drive),
-                        std::to_underlying(INT_PIN_CFG::INT_OPEN_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::FF_DUR), std::bit_cast<std::uint8_t>(ff_dur));
     }
 
-    void MPU6050::set_interrupt_latch(IntLatch const latch) const noexcept
+    FF_DUR MPU6050::get_ff_dur_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::INT_PIN_CFG),
-                        std::to_underlying(latch),
-                        std::to_underlying(INT_PIN_CFG::INT_RD_CLEAR_BIT));
+        return std::bit_cast<FF_DUR>(this->i2c_device_.read_byte(std::to_underlying(RA::FF_DUR)));
     }
 
-    void MPU6050::set_interrupt_latch_clear(IntClear const clear) const noexcept
+    void MPU6050::set_mot_thr_register(MOT_THR const mot_thr) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::INT_PIN_CFG),
-                        std::to_underlying(clear),
-                        std::to_underlying(INT_PIN_CFG::INT_RD_CLEAR_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::MOT_THR), std::bit_cast<std::uint8_t>(mot_thr));
     }
 
-    void MPU6050::set_f_sync_interrupt_mode(IntMode const mode) const noexcept
+    MOT_THR MPU6050::get_mot_thr_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::INT_PIN_CFG),
-                        std::to_underlying(mode),
-                        std::to_underlying(INT_PIN_CFG::FSYNC_INT_LEVEL_BIT));
+        return std::bit_cast<MOT_THR>(this->i2c_device_.read_byte(std::to_underlying(RA::MOT_THR)));
     }
 
-    void MPU6050::set_f_sync_interrupt_enabled(bool const enabled) const noexcept
+    void MPU6050::set_mot_dur_register(MOT_DUR const mot_dur) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::INT_PIN_CFG),
-                        enabled,
-                        std::to_underlying(INT_PIN_CFG::FSYNC_INT_EN_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::MOT_DUR), std::bit_cast<std::uint8_t>(mot_dur));
     }
 
-    void MPU6050::set_i2c_bypass_enabled(bool const enabled) const noexcept
+    MOT_DUR MPU6050::get_mot_dur_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::INT_PIN_CFG),
-                        enabled,
-                        std::to_underlying(INT_PIN_CFG::I2C_BYPASS_EN_BIT));
+        return std::bit_cast<MOT_DUR>(this->i2c_device_.read_byte(std::to_underlying(RA::MOT_DUR)));
     }
 
-    void MPU6050::set_clock_output_enabled(bool const enabled) const noexcept
+    ZRMOT_THR MPU6050::get_zrmot_thr_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::INT_PIN_CFG), enabled, std::to_underlying(INT_PIN_CFG::CLK_OUT_BIT));
+        return std::bit_cast<ZRMOT_THR>(this->i2c_device_.read_byte(std::to_underlying(RA::ZRMOT_THR)));
     }
 
-    void MPU6050::set_int_enabled(std::uint8_t const int_enabled) const noexcept
+    void MPU6050::set_zrmot_thr_register(ZRMOT_THR const zrmot_thr) const noexcept
     {
-        this->write_byte(std::to_underlying(RA::INT_ENABLE), int_enabled);
+        this->i2c_device_.write_byte(std::to_underlying(RA::ZRMOT_THR), std::bit_cast<std::uint8_t>(zrmot_thr));
     }
 
-    void MPU6050::set_int_data_ready_enabled(bool const enabled) const noexcept
+    void MPU6050::set_zrmot_dur_register(ZRMOT_DUR const zrmot_dur) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::INT_ENABLE), enabled, std::to_underlying(INT_STATUS::DATA_RDY_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::ZRMOT_DUR), std::bit_cast<std::uint8_t>(zrmot_dur));
     }
 
-    void MPU6050::set_int_zero_motion_enabled(bool const enabled) const noexcept
+    ZRMOT_DUR MPU6050::get_zrmot_dur_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::INT_ENABLE), enabled, std::to_underlying(INT_STATUS::ZMOT_BIT));
+        return std::bit_cast<ZRMOT_DUR>(this->i2c_device_.read_byte(std::to_underlying(RA::ZRMOT_DUR)));
     }
 
-    void MPU6050::set_int_motion_enabled(bool const enabled) const noexcept
+    void MPU6050::set_fifo_en_register(FIFO_EN const fifo_en) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::INT_ENABLE), enabled, std::to_underlying(INT_STATUS::MOT_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::FIFO_EN), std::bit_cast<std::uint8_t>(fifo_en));
     }
 
-    void MPU6050::set_int_free_fall_enabled(bool const enabled) const noexcept
+    FIFO_EN MPU6050::get_fifo_en_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::INT_ENABLE), enabled, std::to_underlying(INT_STATUS::FF_BIT));
+        return std::bit_cast<FIFO_EN>(this->i2c_device_.read_byte(std::to_underlying(RA::FIFO_EN)));
     }
 
-    void MPU6050::set_int_fifo_overflow_enabled(bool const enabled) const noexcept
+    void MPU6050::set_i2c_mst_ctrl_register(I2C_MST_CTRL const i2c_mst_ctrl) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::INT_ENABLE), enabled, std::to_underlying(INT_STATUS::FIFO_OFLOW_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::I2C_MST_CTRL), std::bit_cast<std::uint8_t>(i2c_mst_ctrl));
     }
 
-    void MPU6050::set_int_i2c_master_enabled(bool const enabled) const noexcept
+    I2C_MST_CTRL MPU6050::get_i2c_mst_ctrl_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::INT_ENABLE), enabled, std::to_underlying(INT_STATUS::I2C_MST_INT_BIT));
+        return std::bit_cast<I2C_MST_CTRL>(this->i2c_device_.read_byte(std::to_underlying(RA::I2C_MST_CTRL)));
     }
 
-    std::uint8_t MPU6050::get_int_status() const noexcept
+    void MPU6050::set_i2c_slv_addr_register(SlaveNum const slave_num, I2C_SLV_ADDR const i2c_slv_addr) const noexcept
     {
-        return this->read_byte(std::to_underlying(RA::INT_STATUS));
+        this->i2c_device_.write_byte(static_cast<uint8_t>(std::to_underlying(RA::I2C_SLV0_ADDR) +
+                                                          static_cast<std::uint8_t>(3) * std::to_underlying(slave_num)),
+                                     std::bit_cast<std::uint8_t>(i2c_slv_addr));
     }
 
-    bool MPU6050::get_int_free_fall_status() const noexcept
+    void MPU6050::set_i2c_slv_reg_register(SlaveNum const slave_num, I2C_SLV_REG const i2c_slv_reg) const noexcept
     {
-        return this->read_bit(std::to_underlying(RA::INT_STATUS), std::to_underlying(INT_STATUS::FF_BIT));
+        this->i2c_device_.write_byte(static_cast<uint8_t>(std::to_underlying(RA::I2C_SLV0_REG) +
+                                                          static_cast<std::uint8_t>(3) * std::to_underlying(slave_num)),
+                                     std::bit_cast<std::uint8_t>(i2c_slv_reg));
     }
 
-    bool MPU6050::get_int_motion_status() const noexcept
+    void MPU6050::set_i2c_slv_ctrl_register(SlaveNum const slave_num, I2C_SLV_CTRL const i2c_slv_ctrl) const noexcept
     {
-        return this->read_bit(std::to_underlying(RA::INT_STATUS), std::to_underlying(INT_STATUS::MOT_BIT));
+        this->i2c_device_.write_byte(static_cast<uint8_t>(std::to_underlying(RA::I2C_SLV0_CTRL) +
+                                                          static_cast<std::uint8_t>(3) * std::to_underlying(slave_num)),
+                                     std::bit_cast<std::uint8_t>(i2c_slv_ctrl));
     }
 
-    bool MPU6050::get_int_zero_motion_status() const noexcept
+    void MPU6050::set_i2c_slv4_addr_register(I2C_SLV4_ADDR const i2c_slv4_addr) const noexcept
     {
-        return this->read_bit(std::to_underlying(RA::INT_STATUS), std::to_underlying(INT_STATUS::ZMOT_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::I2C_SLV4_ADDR), std::bit_cast<std::uint8_t>(i2c_slv4_addr));
     }
 
-    bool MPU6050::get_int_fifo_overflow_status() const noexcept
+    void MPU6050::set_i2c_slv4_reg_register(I2C_SLV4_REG const i2c_slv4_reg) const noexcept
     {
-        return this->read_bit(std::to_underlying(RA::INT_STATUS), std::to_underlying(INT_STATUS::FIFO_OFLOW_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::I2C_SLV4_REG), std::bit_cast<std::uint8_t>(i2c_slv4_reg));
     }
 
-    bool MPU6050::get_int_i2c_master_status() const noexcept
+    void MPU6050::set_i2c_slv4_ctrl_register(I2C_SLV4_CTRL const i2c_slv4_ctrl) const noexcept
     {
-        return this->read_bit(std::to_underlying(RA::INT_STATUS), std::to_underlying(INT_STATUS::I2C_MST_INT_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::I2C_SLV4_CTRL), std::bit_cast<std::uint8_t>(i2c_slv4_ctrl));
     }
 
-    bool MPU6050::get_int_data_ready_status() const noexcept
+    void MPU6050::set_i2c_slv4_do_register(I2C_SLV4_DO const i2c_slv4_do) const noexcept
     {
-        return this->read_bit(std::to_underlying(RA::INT_STATUS), std::to_underlying(INT_STATUS::DATA_RDY_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::I2C_SLV4_DO), std::bit_cast<std::uint8_t>(i2c_slv4_do));
     }
 
-    Vec3D<std::int16_t> MPU6050::get_acceleration_raw() const noexcept
+    I2C_SLV4_DI MPU6050::get_i2c_slv4_di_register() const noexcept
     {
-        std::int16_t buffer[3];
-        this->read_bytes(std::to_underlying(RA::ACCEL_XOUT_H), (std::uint8_t*)buffer, sizeof(buffer));
-        return Vec3D<std::int16_t>{buffer[0], buffer[1], buffer[2]};
+        return std::bit_cast<I2C_SLV4_DI>(this->i2c_device_.read_byte(std::to_underlying(RA::I2C_SLV4_DI)));
     }
 
-    std::int16_t MPU6050::get_acceleration_x_raw() const noexcept
+    I2C_MST_STATUS MPU6050::get_i2c_mst_status_register() const noexcept
     {
-        std::int16_t buffer;
-        this->read_bytes(std::to_underlying(RA::ACCEL_XOUT_H), (std::uint8_t*)&buffer, sizeof(buffer));
-        return buffer;
+        return std::bit_cast<I2C_MST_STATUS>(this->i2c_device_.read_byte(std::to_underlying(RA::I2C_MST_STATUS)));
     }
 
-    std::int16_t MPU6050::get_acceleration_y_raw() const noexcept
+    void MPU6050::set_int_pin_cfg_register(INT_PIN_CFG const int_pin_cfg) const noexcept
     {
-        std::int16_t buffer;
-        this->read_bytes(std::to_underlying(RA::ACCEL_YOUT_H), (std::uint8_t*)&buffer, sizeof(buffer));
-        return buffer;
+        this->i2c_device_.write_byte(std::to_underlying(RA::INT_PIN_CFG), std::bit_cast<std::uint8_t>(int_pin_cfg));
     }
 
-    std::int16_t MPU6050::get_acceleration_z_raw() const noexcept
+    INT_PIN_CFG MPU6050::get_int_pin_cfg_register() const noexcept
     {
-        std::int16_t buffer;
-        this->read_bytes(std::to_underlying(RA::ACCEL_ZOUT_H), (std::uint8_t*)&buffer, sizeof(buffer));
-        return buffer;
+        return std::bit_cast<INT_PIN_CFG>(this->i2c_device_.read_byte(std::to_underlying(RA::INT_PIN_CFG)));
     }
 
-    std::int16_t MPU6050::get_temperature_raw() const noexcept
+    void MPU6050::set_int_enable_register(INT_ENABLE const int_enable) const noexcept
     {
-        std::int16_t buffer;
-        this->read_bytes(std::to_underlying(RA::TEMP_OUT_H), (std::uint8_t*)&buffer, sizeof(buffer));
-        return buffer;
+        this->i2c_device_.write_byte(std::to_underlying(RA::INT_ENABLE), std::bit_cast<std::uint8_t>(int_enable));
     }
 
-    Vec3D<std::int16_t> MPU6050::get_rotation_raw() const noexcept
+    INT_ENABLE MPU6050::get_int_enable_register() const noexcept
     {
-        std::int16_t buffer[3];
-        this->read_bytes(std::to_underlying(RA::GYRO_XOUT_H), (std::uint8_t*)buffer, sizeof(buffer));
-        return Vec3D<std::int16_t>{buffer[0], buffer[1], buffer[2]};
+        return std::bit_cast<INT_ENABLE>(this->i2c_device_.read_byte(std::to_underlying(RA::INT_ENABLE)));
     }
 
-    std::int16_t MPU6050::get_rotation_x_raw() const noexcept
+    DMP_INT_STATUS MPU6050::get_dmp_int_status_register() const noexcept
     {
-        std::int16_t buffer;
-        this->read_bytes(std::to_underlying(RA::GYRO_XOUT_H), (std::uint8_t*)&buffer, sizeof(buffer));
-        return buffer;
+        return std::bit_cast<DMP_INT_STATUS>(this->i2c_device_.read_byte(std::to_underlying(RA::DMP_INT_STATUS)));
     }
 
-    std::int16_t MPU6050::get_rotation_y_raw() const noexcept
+    TC MPU6050::get_tc_register() const noexcept
     {
-        std::int16_t buffer;
-        this->read_bytes(std::to_underlying(RA::GYRO_YOUT_H), (std::uint8_t*)&buffer, sizeof(buffer));
-        return buffer;
+        return std::bit_cast<TC>(static_cast<std::uint8_t>(0));
     }
 
-    std::int16_t MPU6050::get_rotation_z_raw() const noexcept
+    INT_STATUS MPU6050::get_int_status_register() const noexcept
     {
-        std::int16_t buffer;
-        this->read_bytes(std::to_underlying(RA::GYRO_ZOUT_H), (std::uint8_t*)&buffer, sizeof(buffer));
-        return buffer;
+        return std::bit_cast<INT_STATUS>(this->i2c_device_.read_byte(std::to_underlying(RA::INT_STATUS)));
     }
 
-    std::uint8_t MPU6050::get_external_sensor_byte(std::uint8_t const position) const noexcept
+    ACCEL_OUT MPU6050::get_accel_out_registers() const noexcept
     {
-        return this->read_byte(std::to_underlying(RA::EXT_SENS_DATA_00) + position);
+        return std::bit_cast<ACCEL_OUT>(
+            this->i2c_device_.read_bytes<sizeof(ACCEL_OUT)>(std::to_underlying(RA::ACCEL_XOUT_H)));
     }
 
-    std::uint16_t MPU6050::get_external_sensor_word(std::uint8_t const position) const noexcept
+    ACCEL_XOUT MPU6050::get_accel_xout_registers() const noexcept
     {
-        return this->read_byte(std::to_underlying(RA::EXT_SENS_DATA_00) + position);
+        return std::bit_cast<ACCEL_XOUT>(
+            this->i2c_device_.read_bytes<sizeof(ACCEL_XOUT)>(std::to_underlying(RA::ACCEL_XOUT_H)));
     }
 
-    std::uint32_t MPU6050::get_external_sensor_dword(std::uint8_t const position) const noexcept
+    ACCEL_YOUT MPU6050::get_accel_yout_registers() const noexcept
     {
-        return this->read_byte(std::to_underlying(RA::EXT_SENS_DATA_00) + position);
+        return std::bit_cast<ACCEL_YOUT>(
+            this->i2c_device_.read_bytes<sizeof(ACCEL_YOUT)>(std::to_underlying(RA::ACCEL_YOUT_H)));
     }
 
-    std::uint8_t MPU6050::get_motion_status() const noexcept
+    ACCEL_ZOUT MPU6050::get_accel_zout_registers() const noexcept
     {
-        return this->read_byte(std::to_underlying(RA::MOT_DETECT_STATUS));
+        return std::bit_cast<ACCEL_ZOUT>(
+            this->i2c_device_.read_bytes<sizeof(ACCEL_ZOUT)>(std::to_underlying(RA::ACCEL_ZOUT_H)));
     }
 
-    bool MPU6050::get_x_neg_motion_detected() const noexcept
+    TEMP_OUT MPU6050::get_temp_out_registers() const noexcept
     {
-        return this->read_bit(std::to_underlying(RA::MOT_DETECT_STATUS),
-                              std::to_underlying(MOT_DETECT_STATUS::MOT_XNEG_BIT));
+        return std::bit_cast<TEMP_OUT>(
+            this->i2c_device_.read_bytes<sizeof(TEMP_OUT)>(std::to_underlying(RA::TEMP_OUT_H)));
     }
 
-    bool MPU6050::get_x_pos_motion_detected() const noexcept
+    GYRO_OUT MPU6050::get_gyro_out_registers() const noexcept
     {
-        return this->read_bit(std::to_underlying(RA::MOT_DETECT_STATUS),
-                              std::to_underlying(MOT_DETECT_STATUS::MOT_XPOS_BIT));
+        return std::bit_cast<GYRO_OUT>(
+            this->i2c_device_.read_bytes<sizeof(GYRO_OUT)>(std::to_underlying(RA::GYRO_XOUT_H)));
     }
 
-    bool MPU6050::get_y_neg_motion_detected() const noexcept
+    GYRO_XOUT MPU6050::get_gyro_xout_registers() const noexcept
     {
-        return this->read_bit(std::to_underlying(RA::MOT_DETECT_STATUS),
-                              std::to_underlying(MOT_DETECT_STATUS::MOT_YNEG_BIT));
+        return std::bit_cast<GYRO_XOUT>(
+            this->i2c_device_.read_bytes<sizeof(GYRO_XOUT)>(std::to_underlying(RA::GYRO_XOUT_H)));
     }
 
-    bool MPU6050::get_y_pos_motion_detected() const noexcept
+    GYRO_YOUT MPU6050::get_gyro_yout_registers() const noexcept
     {
-        return this->read_bit(std::to_underlying(RA::MOT_DETECT_STATUS),
-                              std::to_underlying(MOT_DETECT_STATUS::MOT_YPOS_BIT));
+        return std::bit_cast<GYRO_YOUT>(
+            this->i2c_device_.read_bytes<sizeof(GYRO_YOUT)>(std::to_underlying(RA::GYRO_YOUT_H)));
     }
 
-    bool MPU6050::get_z_neg_motion_detected() const noexcept
+    GYRO_ZOUT MPU6050::get_gyro_zout_registers() const noexcept
     {
-        return this->read_bit(std::to_underlying(RA::MOT_DETECT_STATUS),
-                              std::to_underlying(MOT_DETECT_STATUS::MOT_ZNEG_BIT));
+        return std::bit_cast<GYRO_ZOUT>(
+            this->i2c_device_.read_bytes<sizeof(GYRO_ZOUT)>(std::to_underlying(RA::GYRO_ZOUT_H)));
     }
 
-    bool MPU6050::get_z_pos_motion_detected() const noexcept
+    EXT_SENS_DATA MPU6050::get_ext_sens_data_register(std::uint8_t const position) const noexcept
     {
-        return this->read_bit(std::to_underlying(RA::MOT_DETECT_STATUS),
-                              std::to_underlying(MOT_DETECT_STATUS::MOT_ZPOS_BIT));
+        return std::bit_cast<EXT_SENS_DATA>(
+            this->i2c_device_.read_byte(std::to_underlying(RA::EXT_SENS_DATA_00) + position));
     }
 
-    bool MPU6050::get_zero_motion_detected() const noexcept
+    MOT_DETECT_STATUS MPU6050::get_mot_detect_status_registet() const noexcept
     {
-        return this->read_bit(std::to_underlying(RA::MOT_DETECT_STATUS),
-                              std::to_underlying(MOT_DETECT_STATUS::MOT_ZRMOT_BIT));
+        return std::bit_cast<MOT_DETECT_STATUS>(this->i2c_device_.read_byte(std::to_underlying(RA::MOT_DETECT_STATUS)));
     }
 
-    void MPU6050::set_slave_output_byte(std::uint8_t const num, std::uint8_t const data) const noexcept
+    void MPU6050::set_i2c_slv_do_register(SlaveNum const slave_num, I2C_SLV_DO const i2c_slv_do) const noexcept
     {
-        this->write_byte(std::to_underlying(RA::I2C_SLV0_DO) + num, data);
+        this->i2c_device_.write_byte(
+            static_cast<std::uint8_t>(std::to_underlying(RA::I2C_SLV0_DO) +
+                                      static_cast<std::uint8_t>(3) * std::to_underlying(slave_num)),
+            std::bit_cast<std::uint8_t>(i2c_slv_do));
     }
 
-    void MPU6050::set_external_shadow_delay_enabled(bool const enabled) const noexcept
+    void MPU6050::set_i2c_mst_delay_ctrl_register(I2C_MST_DELAY_CTRL const i2c_mst_delay_ctrl) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::I2C_MST_CTRL),
-                        enabled,
-                        std::to_underlying(DELAY_CTRL::DELAY_ES_SHADOW_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::I2C_MST_DELAY_CTRL),
+                                     std::bit_cast<std::uint8_t>(i2c_mst_delay_ctrl));
     }
 
-    void MPU6050::set_slave_delay_enabled(std::uint8_t const num, bool const enabled) const noexcept
+    I2C_MST_DELAY_CTRL MPU6050::get_i2c_mst_delay_ctrl_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::I2C_MST_DELAY_CTRL), enabled, num);
+        return std::bit_cast<I2C_MST_DELAY_CTRL>(
+            this->i2c_device_.read_byte(std::to_underlying(RA::I2C_MST_DELAY_CTRL)));
     }
 
-    void MPU6050::reset_gyro_path() const noexcept
+    void MPU6050::set_signal_path_reset_register(SIGNAL_PATH_RESET const signal_path_reset) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::SIGNAL_PATH_RESET),
-                        true,
-                        std::to_underlying(PATH_RESET::GYRO_RESET_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::SIGNAL_PATH_RESET),
+                                     std::bit_cast<std::uint8_t>(signal_path_reset));
     }
 
-    void MPU6050::reset_accel_path() const noexcept
+    SIGNAL_PATH_RESET MPU6050::get_signal_path_reset_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::SIGNAL_PATH_RESET),
-                        true,
-                        std::to_underlying(PATH_RESET::ACCEL_RESET_BIT));
+        return std::bit_cast<SIGNAL_PATH_RESET>(this->i2c_device_.read_byte(std::to_underlying(RA::SIGNAL_PATH_RESET)));
     }
 
-    void MPU6050::reset_temperature_path() const noexcept
+    void MPU6050::set_mot_detect_ctrl_register(MOT_DETECT_CTRL const mot_detect_ctrl) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::SIGNAL_PATH_RESET),
-                        true,
-                        std::to_underlying(PATH_RESET::TEMP_RESET_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::MOT_DETECT_CTRL),
+                                     std::bit_cast<std::uint8_t>(mot_detect_ctrl));
     }
 
-    void MPU6050::set_motion_detection_control(std::uint8_t const control) const noexcept
+    MOT_DETECT_CTRL MPU6050::get_mot_detect_ctrl_register() const noexcept
     {
-        this->write_byte(std::to_underlying(RA::MOT_DETECT_CTRL), control);
+        return std::bit_cast<MOT_DETECT_CTRL>(this->i2c_device_.read_byte(std::to_underlying(RA::MOT_DETECT_CTRL)));
     }
 
-    void MPU6050::set_accel_power_on_delay(Delay const delay) const noexcept
+    void MPU6050::set_user_ctrl_register(USER_CTRL const user_ctrl) const noexcept
     {
-        this->write_bits(std::to_underlying(RA::MOT_DETECT_CTRL),
-                         std::to_underlying(delay),
-                         std::to_underlying(DETECT::ACCEL_ON_DELAY_BIT),
-                         std::to_underlying(DETECT::ACCEL_ON_DELAY_LENGTH));
+        this->i2c_device_.write_byte(std::to_underlying(RA::USER_CTRL), std::bit_cast<std::uint8_t>(user_ctrl));
     }
 
-    void MPU6050::set_free_fall_detection_counter_decrement(DetectDecrement const decrement) const noexcept
+    USER_CTRL MPU6050::get_user_ctrl_register() const noexcept
     {
-        this->write_bits(std::to_underlying(RA::MOT_DETECT_CTRL),
-                         std::to_underlying(decrement),
-                         std::to_underlying(DETECT::FF_COUNT_BIT),
-                         std::to_underlying(DETECT::FF_COUNT_LENGTH));
+        return std::bit_cast<USER_CTRL>(this->i2c_device_.read_byte(std::to_underlying(RA::USER_CTRL)));
     }
 
-    void MPU6050::set_motion_detection_counter_decrement(DetectDecrement const decrement) const noexcept
+    void MPU6050::set_pwr_mgmt_1_register(PWR_MGMT_1 const pwr_mgmt_1) const noexcept
     {
-        this->write_bits(std::to_underlying(RA::MOT_DETECT_CTRL),
-                         std::to_underlying(decrement),
-                         std::to_underlying(DETECT::MOT_COUNT_BIT),
-                         std::to_underlying(DETECT::MOT_COUNT_LENGTH));
+        this->i2c_device_.write_byte(std::to_underlying(RA::PWR_MGMT_1), std::bit_cast<std::uint8_t>(pwr_mgmt_1));
     }
 
-    void MPU6050::set_i2c_master_mode_enabled(bool const enabled) const noexcept
+    PWR_MGMT_1 MPU6050::get_pwr_mgmt_1_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::USER_CTRL), enabled, std::to_underlying(USER_CTRL::I2C_MST_EN_BIT));
+        return std::bit_cast<PWR_MGMT_1>(this->i2c_device_.read_byte(std::to_underlying(RA::PWR_MGMT_1)));
     }
 
-    void MPU6050::set_fifo_enabled(bool const enabled) const noexcept
+    void MPU6050::set_pwr_mgmt_2_register(PWR_MGMT_2 const pwr_mgmt_2) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::USER_CTRL), enabled, std::to_underlying(USER_CTRL::FIFO_EN_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::PWR_MGMT_2), std::bit_cast<std::uint8_t>(pwr_mgmt_2));
     }
 
-    void MPU6050::reset_fifo() const noexcept
+    PWR_MGMT_2 MPU6050::set_pwr_mgmt_2_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::USER_CTRL), true, std::to_underlying(USER_CTRL::FIFO_RESET_BIT));
+        return std::bit_cast<PWR_MGMT_2>(this->i2c_device_.read_byte(std::to_underlying(RA::PWR_MGMT_2)));
     }
 
-    void MPU6050::reset_i2c_master() const noexcept
+    void MPU6050::set_bank_sel_register(BANK_SEL const bank_sel) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::USER_CTRL), true, std::to_underlying(USER_CTRL::I2C_MST_RESET_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::BANK_SEL), std::bit_cast<std::uint8_t>(bank_sel));
     }
 
-    void MPU6050::reset_sensors() const noexcept
+    BANK_SEL MPU6050::get_bank_sel_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::USER_CTRL), true, std::to_underlying(USER_CTRL::SIG_COND_RESET_BIT));
+        return std::bit_cast<BANK_SEL>(this->i2c_device_.read_byte(std::to_underlying(RA::BANK_SEL)));
     }
 
-    void MPU6050::device_reset() const noexcept
+    void MPU6050::set_mem_start_addr_register(MEM_START_ADDR const mem_start_addr) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::PWR_MGMT_1), true, std::to_underlying(PWR_MGMT_1::DEVICE_RESET_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::MEM_START_ADDR),
+                                     std::bit_cast<std::uint8_t>(mem_start_addr));
     }
 
-    void MPU6050::device_wake_up() const noexcept
+    MEM_START_ADDR MPU6050::get_mem_start_addr_register() const noexcept
     {
-        this->write_byte(std::to_underlying(RA::PWR_MGMT_1), 0x00);
+        return std::bit_cast<MEM_START_ADDR>(this->i2c_device_.read_byte(std::to_underlying(RA::MEM_START_ADDR)));
     }
 
-    void MPU6050::set_sleep_enabled(bool const enabled) const noexcept
+    void MPU6050::set_mem_r_w_register(MEM_R_W const mem_r_w) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::PWR_MGMT_1), enabled, std::to_underlying(PWR_MGMT_1::SLEEP_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::MEM_R_W), std::bit_cast<std::uint8_t>(mem_r_w));
     }
 
-    void MPU6050::set_wake_cycle_enabled(bool const enabled) const noexcept
+    MEM_R_W MPU6050::get_mem_r_w_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::PWR_MGMT_1), enabled, std::to_underlying(PWR_MGMT_1::CYCLE_BIT));
+        return std::bit_cast<MEM_R_W>(this->i2c_device_.read_byte(std::to_underlying(RA::MEM_R_W)));
     }
 
-    void MPU6050::set_temperature_sensor_enabled(bool const enabled) const noexcept
+    void MPU6050::set_dmp_cfg_1_register(DMP_CFG_1 const dmp_cfg_1) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::PWR_MGMT_1), !enabled, std::to_underlying(PWR_MGMT_1::TEMP_DIS_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::DMP_CFG_1), std::bit_cast<std::uint8_t>(dmp_cfg_1));
     }
 
-    void MPU6050::set_clock_source(Clock const source) const noexcept
+    DMP_CFG_1 MPU6050::get_dmp_cfg_1_register() const noexcept
     {
-        this->write_bits(std::to_underlying(RA::PWR_MGMT_1),
-                         std::to_underlying(source),
-                         std::to_underlying(PWR_MGMT_1::CLKSEL_BIT),
-                         std::to_underlying(PWR_MGMT_1::CLKSEL_LENGTH));
+        return std::bit_cast<DMP_CFG_1>(this->i2c_device_.read_byte(std::to_underlying(RA::DMP_CFG_1)));
     }
 
-    void MPU6050::set_wake_up_frequency(WakeFreq const frequency) const noexcept
+    void MPU6050::set_dmp_cfg_2_register(DMP_CFG_2 const dmp_cfg_2) const noexcept
     {
-        this->write_bits(std::to_underlying(RA::PWR_MGMT_2),
-                         std::to_underlying(frequency),
-                         std::to_underlying(PWR_MGMT_2::LP_WAKE_CTRL_BIT),
-                         std::to_underlying(PWR_MGMT_2::LP_WAKE_CTRL_LENGTH));
+        this->i2c_device_.write_byte(std::to_underlying(RA::DMP_CFG_2), std::bit_cast<std::uint8_t>(dmp_cfg_2));
     }
 
-    void MPU6050::set_x_accel_standby(bool const standby) const noexcept
+    DMP_CFG_2 MPU6050::get_dmp_cfg_2_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::PWR_MGMT_2), standby, std::to_underlying(PWR_MGMT_2::STBY_XA_BIT));
+        return std::bit_cast<DMP_CFG_2>(this->i2c_device_.read_byte(std::to_underlying(RA::DMP_CFG_2)));
     }
 
-    void MPU6050::set_y_accel_standby(bool const standby) const noexcept
+    FIFO_COUNT MPU6050::get_fifo_count_registers() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::PWR_MGMT_2), standby, std::to_underlying(PWR_MGMT_2::STBY_YA_BIT));
+        return std::bit_cast<FIFO_COUNT>(
+            this->i2c_device_.read_bytes<sizeof(FIFO_COUNT)>(std::to_underlying(RA::FIFO_COUNTH)));
     }
 
-    void MPU6050::set_z_accel_standby(bool const standby) const noexcept
+    void MPU6050::set_fifo_r_w_register(FIFO_R_W const fifo_r_w) const noexcept
     {
-        this->write_bit(std::to_underlying(RA::PWR_MGMT_2), standby, std::to_underlying(PWR_MGMT_2::STBY_ZA_BIT));
+        this->i2c_device_.write_byte(std::to_underlying(RA::FIFO_R_W), std::bit_cast<std::uint8_t>(fifo_r_w));
     }
 
-    void MPU6050::set_x_gyro_standby(bool const standby) const noexcept
+    FIFO_R_W MPU6050::get_fifo_r_w_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::PWR_MGMT_2), standby, std::to_underlying(PWR_MGMT_2::STBY_XG_BIT));
+        return std::bit_cast<FIFO_R_W>(this->i2c_device_.read_byte(std::to_underlying(RA::FIFO_R_W)));
     }
 
-    void MPU6050::set_y_gyro_standby(bool const standby) const noexcept
+    WHO_AM_I MPU6050::get_who_am_i_register() const noexcept
     {
-        this->write_bit(std::to_underlying(RA::PWR_MGMT_2), standby, std::to_underlying(PWR_MGMT_2::STBY_YG_BIT));
-    }
-
-    void MPU6050::set_z_gyro_standby(bool const standby) const noexcept
-    {
-        this->write_bit(std::to_underlying(RA::PWR_MGMT_2), standby, std::to_underlying(PWR_MGMT_2::STBY_ZG_BIT));
-    }
-
-    std::uint16_t MPU6050::get_fifo_count() const noexcept
-    {
-        std::uint8_t buffer[2];
-        this->read_bytes(std::to_underlying(RA::FIFO_COUNTH), buffer, sizeof(buffer));
-        return (static_cast<std::uint16_t>(buffer[0]) << 8) | static_cast<std::uint16_t>(buffer[1]);
-    }
-
-    std::uint8_t MPU6050::get_fifo_byte() const noexcept
-    {
-        return this->read_byte(std::to_underlying(RA::FIFO_R_W));
-    }
-
-    void MPU6050::get_fifo_bytes(std::uint8_t* read_data, std::size_t const read_size) const noexcept
-    {
-        this->read_bytes(std::to_underlying(RA::FIFO_R_W), read_data, read_size);
-    }
-
-    void MPU6050::set_fifo_byte(std::uint8_t const write_data) const noexcept
-    {
-        this->write_byte(std::to_underlying(RA::FIFO_R_W), write_data);
-    }
-
-    void MPU6050::set_fifo_bytes(std::uint8_t* write_data, std::size_t const write_size) const noexcept
-    {
-        this->write_bytes(std::to_underlying(RA::FIFO_R_W), write_data, write_size);
-    }
-
-    std::uint8_t MPU6050::get_device_id() const noexcept
-    {
-        return this->read_byte(std::to_underlying(RA::WHO_AM_I));
+        return std::bit_cast<WHO_AM_I>(this->i2c_device_.read_byte(std::to_underlying(RA::WHO_AM_I)));
     }
 
 }; // namespace MPU6050
