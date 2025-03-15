@@ -61,24 +61,6 @@ namespace MPU6050 {
         template <std::size_t SIZE>
         void write_bytes(std::uint8_t const reg_address, std::array<std::uint8_t, SIZE> const& bytes) const noexcept;
 
-        bool read_bit(std::uint8_t const reg_address, std::uint8_t const position) const noexcept;
-
-        std::uint8_t
-        read_bits(std::uint8_t const reg_address, std::uint8_t const position, std::uint8_t const size) const noexcept;
-
-        void write_bit(std::uint8_t const reg_address, bool const bit, std::uint8_t const position) const noexcept;
-
-        void write_bits(std::uint8_t const reg_address,
-                        std::uint8_t const bit,
-                        std::uint8_t const position,
-                        std::uint8_t const size) const noexcept;
-
-        void
-        read_bytes(std::uint8_t const reg_address, std::uint8_t* const bytes, std::uint8_t const size) const noexcept;
-
-        void
-        write_bytes(std::uint8_t const reg_address, std::uint8_t* const bytes, std::uint8_t const size) const noexcept;
-
         void device_reset() const noexcept;
         void device_wake_up() const noexcept;
         bool is_valid_device_id() const noexcept;

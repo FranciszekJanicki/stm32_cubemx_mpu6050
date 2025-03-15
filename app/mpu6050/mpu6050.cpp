@@ -124,49 +124,6 @@ namespace MPU6050 {
         this->i2c_device_.write_byte(reg_address, byte);
     }
 
-    bool MPU6050::read_bit(std::uint8_t const reg_address, std::uint8_t const position) const noexcept
-    {
-        return Utility::read_bit(this->read_byte(reg_address), position);
-    }
-
-    std::uint8_t MPU6050::read_bits(std::uint8_t const reg_address,
-                                    std::uint8_t const position,
-                                    std::uint8_t const size) const noexcept
-    {
-        return Utility::read_bits(this->read_byte(reg_address), size, position);
-    }
-
-    void MPU6050::write_bit(std::uint8_t const reg_address, bool const bit, std::uint8_t const position) const noexcept
-    {
-        auto byte = this->read_byte(reg_address);
-        Utility::write_bit(byte, bit, position);
-        this->write_byte(reg_address, byte);
-    }
-
-    void MPU6050::write_bits(std::uint8_t const reg_address,
-                             std::uint8_t const bits,
-                             std::uint8_t const position,
-                             std::uint8_t const size) const noexcept
-    {
-        auto byte = this->read_byte(reg_address);
-        Utility::write_bits(byte, bits, size, position);
-        this->write_byte(reg_address, byte);
-    }
-
-    void MPU6050::read_bytes(std::uint8_t const reg_address,
-                             std::uint8_t* const bytes,
-                             std::uint8_t const size) const noexcept
-    {
-        this->i2c_device_.read_bytes(reg_address, bytes, size);
-    }
-
-    void MPU6050::write_bytes(std::uint8_t const reg_address,
-                              std::uint8_t* const bytes,
-                              std::uint8_t const size) const noexcept
-    {
-        this->i2c_device_.write_bytes(reg_address, bytes, size);
-    }
-
     void MPU6050::device_reset() const noexcept
     {
         this->set_pwr_mgmt_1_register(std::bit_cast<PWR_MGMT_1>(std::uint8_t{0b10000000}));
