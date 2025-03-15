@@ -2,21 +2,14 @@
 #define MPU6050_DMP_HPP
 
 #include "mpu6050.hpp"
-#include "quaternion3d.hpp"
-#include "vector3d.hpp"
-#include <array>
-#include <cstdint>
+#include "mpu6050_config.hpp"
+#include "mpu6050_dmp_config.hpp"
+#include "mpu6050_dmp_img.hpp"
 
 namespace MPU6050 {
 
     struct MPU6050_DMP {
     public:
-        template <typename T>
-        using Vec3D = Utility::Vector3D<T>;
-
-        template <typename T>
-        using Quat3D = Utility::Quaternion3D<T>;
-
         MPU6050_DMP() noexcept = default;
         MPU6050_DMP(MPU6050&& mpu6050) noexcept;
 

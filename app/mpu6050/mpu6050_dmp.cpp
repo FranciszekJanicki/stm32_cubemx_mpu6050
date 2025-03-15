@@ -1,7 +1,6 @@
 #include "mpu6050_dmp.hpp"
-#include "mpu6050.hpp"
-#include "mpu6050_dmp_memory.hpp"
-#include "mpu6050_registers.hpp"
+#include "mpu6050_config.hpp"
+#include "mpu6050_dmp_config.hpp"
 
 namespace MPU6050 {
 
@@ -38,14 +37,14 @@ namespace MPU6050 {
         this->mpu6050_.set_i2c_master_mode_enabled(false);
         this->mpu6050_.set_slave_address(0, 0x68);
         this->mpu6050_.reset_i2c_master();
-        this->mpu6050_.set_clock_source(MPU6050::Clock::PLL_ZGYRO);
+        this->mpu6050_.set_clock_source(Clock::PLL_ZGYRO);
         this->set_int_dmp_enabled(true);
         this->mpu6050_.set_int_fifo_overflow_enabled(true);
-        this->mpu6050_.set_sampling_rate(200, MPU6050::DLPF::BW_42); // 1 / (1 + 4) = 200 Hz
-        this->mpu6050_.set_external_frame_sync(MPU6050::ExtSync::TEMP_OUT_L);
-        this->mpu6050_.set_dlpf_mode(MPU6050::DLPF::BW_42);
-        this->mpu6050_.set_full_scale_gyro_range(MPU6050::GyroRange::GYRO_FS_2000);
-        this->write_memory_block(dmp_memory.data(), dmp_memory.size(), 0x00, 0x00);
+        this->mpu6050_.set_sampling_rate(200, DLPF::BW_42); // 1 / (1 + 4) = 200 Hz
+        this->mpu6050_.set_external_frame_sync(ExtSync::TEMP_OUT_L);
+        this->mpu6050_.set_dlpf_mode(DLPF::BW_42);
+        this->mpu6050_.set_full_scale_gyro_range(GyroRange::GYRO_FS_2000);
+        this->write_memory_block(dmp_img.data(), dmp_img.size(), 0x00, 0x00);
 
         std::array<std::uint8_t, 2UL> dmp_update{0x00, 0x01};
         this->write_memory_block(dmp_update.data(), 0x02, 0x02, 0x16);
@@ -129,32 +128,32 @@ namespace MPU6050 {
 
     void MPU6050_DMP::set_x_accel_offset(std::int16_t const offset) const noexcept
     {
-        this->mpu6050_.write_word(std::to_underlying(RA::XA_OFFS_H), offset);
+        this->mpu6050_.write_bytes(std::to_underlying(RA::XA_OFFS_H), (std::uint8_t*)(&offset), sizeof(offset));
     }
 
     void MPU6050_DMP::set_y_accel_offset(std::int16_t const offset) const noexcept
     {
-        this->mpu6050_.write_word(std::to_underlying(RA::YA_OFFS_H), offset);
+        this->mpu6050_.write_bytes(std::to_underlying(RA::YA_OFFS_H), (std::uint8_t*)(&offset), sizeof(offset));
     }
 
     void MPU6050_DMP::set_z_accel_offset(std::int16_t const offset) const noexcept
     {
-        this->mpu6050_.write_word(std::to_underlying(RA::ZA_OFFS_H), offset);
+        this->mpu6050_.write_bytes(std::to_underlying(RA::ZA_OFFS_H), (std::uint8_t*)(&offset), sizeof(offset));
     }
 
     void MPU6050_DMP::set_x_gyro_offset(std::int16_t const offset) const noexcept
     {
-        this->mpu6050_.write_word(std::to_underlying(RA::XG_OFFS_USRH), offset);
+        this->mpu6050_.write_bytes(std::to_underlying(RA::XG_OFFS_USRH), (std::uint8_t*)(&offset), sizeof(offset));
     }
 
     void MPU6050_DMP::set_y_gyro_offset(std::int16_t const offset) const noexcept
     {
-        this->mpu6050_.write_word(std::to_underlying(RA::YG_OFFS_USRH), offset);
+        this->mpu6050_.write_bytes(std::to_underlying(RA::YG_OFFS_USRH), (std::uint8_t*)(&offset), sizeof(offset));
     }
 
     void MPU6050_DMP::set_z_gyro_offset(std::int16_t const offset) const noexcept
     {
-        this->mpu6050_.write_word(std::to_underlying(RA::ZG_OFFS_USRH), offset);
+        this->mpu6050_.write_bytes(std::to_underlying(RA::ZG_OFFS_USRH), (std::uint8_t*)(&offset), sizeof(offset));
     }
 
     std::array<std::uint8_t, 42UL> MPU6050_DMP::get_dmp_packet() const noexcept

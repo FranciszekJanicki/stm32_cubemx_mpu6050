@@ -1,6 +1,7 @@
 #ifndef MPU6050_DMP_CONFIG_HPP
 #define MPU6050_DMP_CONFIG_HPP
 
+#include "mpu6050.hpp"
 #include "mpu6050_config.hpp"
 
 namespace MPU6050 {
@@ -13,13 +14,6 @@ namespace MPU6050 {
                                 quaternion.z * quaternion.z};
     }
 
-    inline Vec3D<float> quaternion_to_roll_pitch_yaw(Quat3D<float> const& quaternion) noexcept
-    {
-        return Vec3D<float>{quaternion_to_roll(quaternion),
-                            quaternion_to_pitch(quaternion),
-                            quaternion_to_yaw(quaternion)};
-    }
-
     inline float quaternion_to_roll(Quat3D<float> const& quaternion) noexcept
     {
         auto const gravity{quaternion_to_gravity(quaternion)};
@@ -28,8 +22,8 @@ namespace MPU6050 {
 
     inline float quaternion_to_pitch(Quat3D<float> const& quaternion) noexcept
     {
-        auto const gravity{quaternion_to_gravity(quaternion)};
-        auto const pitch{std::atan2(gravity.x, std::sqrt(gravity.y * gravity.y + gravity.z * gravity.z))};
+        auto const gravity = quaternion_to_gravity(quaternion);
+        auto const pitch = std::atan2(gravity.x, std::sqrt(gravity.y * gravity.y + gravity.z * gravity.z));
         return (gravity.z < 0) ? (pitch > 0 ? 3.1416F - pitch : -3.1416F - pitch) : pitch;
     }
 
@@ -37,6 +31,17 @@ namespace MPU6050 {
     {
         return std::atan2(2 * quaternion.x * quaternion.y - 2 * quaternion.w * quaternion.z,
                           2 * quaternion.w * quaternion.w + 2 * quaternion.x * quaternion.x - 1);
+    }
+
+    inline Vec3D<float> quaternion_to_roll_pitch_yaw(Quat3D<float> const& quaternion) noexcept
+    {
+        auto const gravity = quaternion_to_gravity(quaternion);
+        auto const pitch = std::atan2(gravity.x, std::sqrt(gravity.y * gravity.y + gravity.z * gravity.z));
+
+        return Vec3D<float>{std::atan2(gravity.y, gravity.z),
+                            (gravity.z < 0) ? (pitch > 0 ? 3.1416F - pitch : -3.1416F - pitch) : pitch,
+                            std::atan2(2 * quaternion.x * quaternion.y - 2 * quaternion.w * quaternion.z,
+                                       2 * quaternion.w * quaternion.w + 2 * quaternion.x * quaternion.x - 1)};
     }
 
     constexpr auto DMP_MEMORY_BANKS = 8;
