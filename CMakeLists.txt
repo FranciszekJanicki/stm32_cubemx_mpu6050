@@ -24,6 +24,7 @@ add_subdirectory(cmake/stm32cubemx)
 add_subdirectory(app/main)
 add_subdirectory(app/utility)
 add_subdirectory(app/mpu6050)
+add_subdirectory(app/stm32_utility)
 
 target_compile_options(stm32cubemx INTERFACE 
     -w
