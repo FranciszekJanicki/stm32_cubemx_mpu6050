@@ -132,7 +132,7 @@ namespace MPU6050 {
     template <typename T>
     using Quat3D = Utility::Quaternion3D<T>;
 
-    using I2CDevice = Utility::I2CDevice;
+    using I2CDevice = STM32_Utility::I2CDevice;
 
     enum struct DevAddress : std::uint16_t {
         AD0_LOW = 0x68,
