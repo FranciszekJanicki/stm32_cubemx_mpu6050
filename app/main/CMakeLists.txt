@@ -1,18 +1,19 @@
-add_executable(app)
+add_executable(main)
 
-target_sources(app PRIVATE 
+target_sources(main PRIVATE 
     "main.cpp"
 )
 
-target_include_directories(app PRIVATE 
-    "." 
+target_include_directories(main PRIVATE 
+    ${CMAKE_SOURCE_DIR}/app/mpu6050
 )
 
-target_link_libraries(app PRIVATE
+target_link_libraries(main PRIVATE
+    mpu6050
     stm32cubemx
 )
 
-target_compile_options(app PUBLIC
+target_compile_options(main PUBLIC
     -std=c++23
     -Wall
     -Wextra

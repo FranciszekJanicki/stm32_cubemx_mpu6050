@@ -1,7 +1,5 @@
 #include "mpu6050.hpp"
-#include <cmath>
-#include <cstdint>
-#include <cstdio>
+#include "utility.hpp"
 #include <utility>
 
 namespace MPU6050 {
@@ -155,7 +153,7 @@ namespace MPU6050 {
     {
         if (this->is_valid_device_id()) {
             this->device_wake_up();
-            HAL_Delay(200);
+            HAL_Delay(500);
             this->initialize_base(gyro_range, accel_range);
             this->initialize_advanced(sampling_rate, dlpf, dhpf);
             this->initialize_interrupt();
@@ -199,7 +197,7 @@ namespace MPU6050 {
         this->set_interrupt_latch_clear(IntClear::STATUSREAD);
         this->set_interrupt_drive(IntDrive::PUSHPULL);
         this->set_interrupt_mode(IntMode::ACTIVEHIGH);
-        // this->set_int_data_ready_enabled(true);
+        this->set_int_data_ready_enabled(true);
     }
 
     void MPU6050::initialize_motion_interrupt() const noexcept
