@@ -194,7 +194,7 @@ namespace MPU6050 {
     void MPU6050::initialize_data_ready_interrupt() const noexcept
     {
         this->set_interrupt_latch(IntLatch::PULSE50US);
-        this->set_interrupt_latch_clear(IntClear::ANYREAD);
+        this->set_interrupt_latch_clear(IntClear::STATUSREAD);
         this->set_interrupt_drive(IntDrive::PUSHPULL);
         this->set_interrupt_mode(IntMode::ACTIVEHIGH);
         this->set_int_data_ready_enabled(false);
@@ -219,7 +219,7 @@ namespace MPU6050 {
     {
         this->set_free_fall_detection_duration(2);
         this->set_free_fall_detection_threshold(5);
-        // this->set_int_free_fall_enabled(true);
+        this->set_int_free_fall_enabled(true);
     }
 
     void MPU6050::deinitialize() noexcept
@@ -931,9 +931,9 @@ namespace MPU6050 {
 
     std::uint16_t MPU6050::get_fifo_count() const noexcept
     {
-        std::uint8_t buffer[2];
-        this->read_bytes(std::to_underlying(RA::FIFO_COUNTH), buffer, sizeof(buffer));
-        return (static_cast<std::uint16_t>(buffer[0]) << 8) | static_cast<std::uint16_t>(buffer[1]);
+        std::uint16_t buffer[1];
+        this->read_bytes(std::to_underlying(RA::FIFO_COUNTH), reinterpret_cast<std::uint8_t*>(buffer), sizeof(buffer));
+        return buffer[1];
     }
 
     std::uint8_t MPU6050::get_fifo_byte() const noexcept

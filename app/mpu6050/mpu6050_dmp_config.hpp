@@ -8,8 +8,8 @@ namespace MPU6050 {
 
     inline Vec3D<std::float32_t> quaternion_to_gravity(Quat3D<std::float32_t> const& quaternion) noexcept
     {
-        return Vec3D<std::float32_t>{2 * (quaternion.x * quaternion.z - quaternion.w * quaternion.y),
-                                     2 * (quaternion.w * quaternion.x + quaternion.y * quaternion.z),
+        return Vec3D<std::float32_t>{2 * (quaternion.x * quaternion.z + quaternion.w * quaternion.y),
+                                     2 * (quaternion.y * quaternion.z - quaternion.w * quaternion.x),
                                      quaternion.w * quaternion.w - quaternion.x * quaternion.x -
                                          quaternion.y * quaternion.y + quaternion.z * quaternion.z};
     }
@@ -29,8 +29,8 @@ namespace MPU6050 {
 
     inline std::float32_t quaternion_to_yaw(Quat3D<std::float32_t> const& quaternion) noexcept
     {
-        return std::atan2(2 * quaternion.x * quaternion.y - 2 * quaternion.w * quaternion.z,
-                          2 * quaternion.w * quaternion.w + 2 * quaternion.x * quaternion.x - 1);
+        return std::atan2(2 * (quaternion.w * quaternion.z + quaternion.x * quaternion.y),
+                          1 - 2 * (quaternion.y * quaternion.y + quaternion.z * quaternion.z));
     }
 
     inline Vec3D<std::float32_t> quaternion_to_roll_pitch_yaw(Quat3D<std::float32_t> const& quaternion) noexcept

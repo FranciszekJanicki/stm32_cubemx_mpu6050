@@ -457,23 +457,23 @@ namespace MPU6050 {
         LENGTH = 6,
     };
 
-    auto constexpr GYRO_OUTPUT_RATE_DLPF_EN_HZ = 1000U;
-    auto constexpr GYRO_OUTPUT_RATE_DLPF_DIS_HZ = 8000U;
-    auto constexpr ACCEL_OUTPUT_RATE_HZ = 1000U;
+    constexpr auto GYRO_OUTPUT_RATE_DLPF_EN_HZ = 1000U;
+    constexpr auto GYRO_OUTPUT_RATE_DLPF_DIS_HZ = 8000U;
+    constexpr auto ACCEL_OUTPUT_RATE_HZ = 1000U;
 
     inline std::float32_t gyro_range_to_scale(GyroRange const gyro_range) noexcept
     {
         switch (gyro_range) {
             case GyroRange::GYRO_FS_250:
-                return 131.0f;
+                return 131.0F;
             case GyroRange::GYRO_FS_500:
-                return 65.5f;
+                return 65.5F;
             case GyroRange::GYRO_FS_1000:
-                return 32.8f;
+                return 32.8F;
             case GyroRange::GYRO_FS_2000:
-                return 16.4f;
+                return 16.4F;
             default:
-                return 0.0f;
+                return 0.0F;
         }
     }
 

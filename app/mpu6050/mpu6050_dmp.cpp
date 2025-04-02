@@ -26,7 +26,7 @@ namespace MPU6050 {
     void MPU6050_DMP::initialize_dmp() const noexcept
     {
         this->mpu6050_.device_wake_up();
-        HAL_Delay(200);
+        HAL_Delay(500);
         this->mpu6050_.set_sleep_enabled(false);
         this->set_memory_bank(0x10, true, true);
         this->set_memory_start_address(0x06);
@@ -167,6 +167,8 @@ namespace MPU6050 {
             }
 
             while (fifo_count < dmp_packet.size()) {
+                ;
+                ;
             }
 
             for (auto i{0}; i < fifo_count / dmp_packet.size(); ++i) {
