@@ -51,11 +51,11 @@ int main()
     auto mpu_dmp = MPU6050_DMP{std::move(mpu6050)};
 
     while (1) {
-        if (gpio_exti_5) {
-            auto const& [r, p, y] = mpu_dmp.get_roll_pitch_yaw();
-
-            std::printf("RPY: %f, %f, %f\n\r", r, p, y);
-            gpio_exti_5 = false;
-        }
+        // if (gpio_exti_5) {
+        auto const& [r, p, y] = mpu_dmp.get_roll_pitch_yaw();
+        std::printf("r: %f, p: %f, y: %f\n\r", r, p, y);
+        gpio_exti_5 = false;
+        //}
+        HAL_Delay(50);
     }
 }
