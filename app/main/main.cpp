@@ -42,7 +42,7 @@ int main()
 
     auto mpu6050 = MPU6050::MPU6050{std::move(i2c_device),
                                     200U,
-                                    GyroRange::GYRO_FS_2000,
+                                    GyroRange::GYRO_FS_250,
                                     AccelRange::ACCEL_FS_2,
                                     DLPF::BW_42,
                                     DHPF::DHPF_RESET};
@@ -50,10 +50,10 @@ int main()
     auto mpu_dmp = MPU6050_DMP{std::move(mpu6050)};
 
     while (1) {
-        //     if (gpio_exti_5) {
-        auto const& [r, p, y] = mpu_dmp.get_roll_pitch_yaw().value();
-        std::printf("r: %f, p: %f, y: %f\n\r", r, p, y);
-        gpio_exti_5 = false;
-        //   }
+        if (gpio_exti_5) {
+            auto const& [r, p, y] = mpu_dmp.get_roll_pitch_yaw().value();
+            std::printf("r: %f, p: %f, y: %f\n\r", r, p, y);
+            gpio_exti_5 = false;
+        }
     }
 }

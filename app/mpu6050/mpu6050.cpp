@@ -82,26 +82,22 @@ namespace MPU6050 {
 
     std::optional<Vec3D<std::float32_t>> MPU6050::get_roll_pitch_yaw() const noexcept
     {
-        return this->get_acceleration_scaled().transform(
-            [this](Vec3D<std::float32_t> const& accel) { return accel_to_roll_pitch_yaw(accel); });
+        return this->get_acceleration_scaled().transform(&Utility::accel_to_roll_pitch_yaw<std::float32_t>);
     }
 
     std::optional<std::float32_t> MPU6050::get_roll() const noexcept
     {
-        return this->get_acceleration_scaled().transform(
-            [this](Vec3D<std::float32_t> const& accel) { return accel_to_roll(accel); });
+        return this->get_acceleration_scaled().transform(&Utility::accel_to_roll<std::float32_t>);
     }
 
     std::optional<std::float32_t> MPU6050::get_pitch() const noexcept
     {
-        return this->get_acceleration_scaled().transform(
-            [this](Vec3D<std::float32_t> const& accel) { return accel_to_pitch(accel); });
+        return this->get_acceleration_scaled().transform(&Utility::accel_to_pitch<std::float32_t>);
     }
 
     std::optional<std::float32_t> MPU6050::get_yaw() const noexcept
     {
-        return this->get_acceleration_scaled().transform(
-            [this](Vec3D<std::float32_t> const& accel) { return accel_to_yaw(accel); });
+        return this->get_acceleration_scaled().transform(&Utility::accel_to_yaw<std::float32_t>);
     }
 
     std::uint8_t MPU6050::read_byte(std::uint8_t const reg_address) const noexcept
@@ -211,10 +207,10 @@ namespace MPU6050 {
     void MPU6050::initialize_data_ready_interrupt() const noexcept
     {
         this->set_interrupt_latch(IntLatch::PULSE50US);
-        this->set_interrupt_latch_clear(IntClear::ANYREAD);
+        this->set_interrupt_latch_clear(IntClear::STATUSREAD);
         this->set_interrupt_drive(IntDrive::PUSHPULL);
-        this->set_interrupt_mode(IntMode::ACTIVEHIGH);
-        this->set_int_data_ready_enabled(true);
+        this->set_interrupt_mode(IntMode::ACTIVELOW);
+        this->set_int_data_ready_enabled(false);
     }
 
     void MPU6050::initialize_motion_interrupt() const noexcept
@@ -662,12 +658,9 @@ namespace MPU6050 {
         this->read_bytes(std::to_underlying(RA::ACCEL_XOUT_H), buffer, sizeof(buffer));
 
         return this->initialized_ ? std::optional<Vec3D<std::int16_t>>{std::in_place,
-                                                                       (static_cast<std::int16_t>(buffer[0]) << 8) |
-                                                                           static_cast<std::int16_t>(buffer[1]),
-                                                                       (static_cast<std::int16_t>(buffer[2]) << 8) |
-                                                                           static_cast<std::int16_t>(buffer[3]),
-                                                                       (static_cast<std::int16_t>(buffer[4]) << 8) |
-                                                                           static_cast<std::int16_t>(buffer[5])}
+                                                                       (buffer[0] << 8) | buffer[1],
+                                                                       (buffer[2] << 8) | buffer[3],
+                                                                       (buffer[4] << 8) | buffer[5]}
                                   : std::optional<Vec3D<std::int16_t>>{std::nullopt};
     }
 
@@ -676,8 +669,7 @@ namespace MPU6050 {
         std::uint8_t buffer[2];
         this->read_bytes(std::to_underlying(RA::ACCEL_XOUT_H), buffer, sizeof(buffer));
 
-        return this->initialized_ ? std::optional<std::int16_t>{(static_cast<std::int16_t>(buffer[0]) << 8) |
-                                                                static_cast<std::int16_t>(buffer[1])}
+        return this->initialized_ ? std::optional<std::int16_t>{(buffer[0] << 8) | buffer[1]}
                                   : std::optional<std::int16_t>{std::nullopt};
     }
 
@@ -686,8 +678,7 @@ namespace MPU6050 {
         std::uint8_t buffer[2];
         this->read_bytes(std::to_underlying(RA::ACCEL_YOUT_H), buffer, sizeof(buffer));
 
-        return this->initialized_ ? std::optional<std::int16_t>{(static_cast<std::int16_t>(buffer[0]) << 8) |
-                                                                static_cast<std::int16_t>(buffer[1])}
+        return this->initialized_ ? std::optional<std::int16_t>{(buffer[0] << 8) | buffer[1]}
                                   : std::optional<std::int16_t>{std::nullopt};
     }
 
@@ -696,8 +687,7 @@ namespace MPU6050 {
         std::uint8_t buffer[2];
         this->read_bytes(std::to_underlying(RA::ACCEL_ZOUT_H), buffer, sizeof(buffer));
 
-        return this->initialized_ ? std::optional<std::int16_t>{(static_cast<std::int16_t>(buffer[0]) << 8) |
-                                                                static_cast<std::int16_t>(buffer[1])}
+        return this->initialized_ ? std::optional<std::int16_t>{(buffer[0] << 8) | buffer[1]}
                                   : std::optional<std::int16_t>{std::nullopt};
     }
 
@@ -706,8 +696,7 @@ namespace MPU6050 {
         std::uint8_t buffer[2];
         this->read_bytes(std::to_underlying(RA::TEMP_OUT_H), buffer, sizeof(buffer));
 
-        return this->initialized_ ? std::optional<std::int16_t>{(static_cast<std::int16_t>(buffer[0]) << 8) |
-                                                                static_cast<std::int16_t>(buffer[1])}
+        return this->initialized_ ? std::optional<std::int16_t>{(buffer[0] << 8) | buffer[1]}
                                   : std::optional<std::int16_t>{std::nullopt};
     }
 
@@ -717,12 +706,9 @@ namespace MPU6050 {
         this->read_bytes(std::to_underlying(RA::GYRO_XOUT_H), buffer, sizeof(buffer));
 
         return this->initialized_ ? std::optional<Vec3D<std::int16_t>>{std::in_place,
-                                                                       (static_cast<std::int16_t>(buffer[0]) << 8) |
-                                                                           static_cast<std::int16_t>(buffer[1]),
-                                                                       (static_cast<std::int16_t>(buffer[2]) << 8) |
-                                                                           static_cast<std::int16_t>(buffer[3]),
-                                                                       (static_cast<std::int16_t>(buffer[4]) << 8) |
-                                                                           static_cast<std::int16_t>(buffer[5])}
+                                                                       (buffer[0] << 8) | buffer[1],
+                                                                       (buffer[2] << 8) | buffer[3],
+                                                                       (buffer[4] << 8) | buffer[5]}
                                   : std::optional<Vec3D<std::int16_t>>{std::nullopt};
     }
 
@@ -731,8 +717,7 @@ namespace MPU6050 {
         std::uint8_t buffer[2];
         this->read_bytes(std::to_underlying(RA::GYRO_XOUT_H), buffer, sizeof(buffer));
 
-        return this->initialized_ ? std::optional<std::int16_t>{(static_cast<std::int16_t>(buffer[0]) << 8) |
-                                                                static_cast<std::int16_t>(buffer[1])}
+        return this->initialized_ ? std::optional<std::int16_t>{(buffer[0] << 8) | buffer[1]}
                                   : std::optional<std::int16_t>{std::nullopt};
     }
 
@@ -741,8 +726,7 @@ namespace MPU6050 {
         std::uint8_t buffer[2];
         this->read_bytes(std::to_underlying(RA::GYRO_YOUT_H), buffer, sizeof(buffer));
 
-        return this->initialized_ ? std::optional<std::int16_t>{(static_cast<std::int16_t>(buffer[0]) << 8) |
-                                                                static_cast<std::int16_t>(buffer[1])}
+        return this->initialized_ ? std::optional<std::int16_t>{(buffer[0] << 8) | buffer[1]}
                                   : std::optional<std::int16_t>{std::nullopt};
     }
 
@@ -751,8 +735,7 @@ namespace MPU6050 {
         std::uint8_t buffer[2];
         this->read_bytes(std::to_underlying(RA::GYRO_ZOUT_H), buffer, sizeof(buffer));
 
-        return this->initialized_ ? std::optional<std::int16_t>{(static_cast<std::int16_t>(buffer[0]) << 8) |
-                                                                static_cast<std::int16_t>(buffer[1])}
+        return this->initialized_ ? std::optional<std::int16_t>{(buffer[0] << 8) | buffer[1]}
                                   : std::optional<std::int16_t>{std::nullopt};
     }
 
@@ -986,7 +969,7 @@ namespace MPU6050 {
         std::uint8_t buffer[2];
         this->read_bytes(std::to_underlying(RA::FIFO_COUNTH), buffer, sizeof(buffer));
 
-        return (static_cast<std::uint16_t>(buffer[0]) << 8) | static_cast<std::uint16_t>(buffer[1]);
+        return (buffer[0] << 8) | buffer[1];
     }
 
     std::uint8_t MPU6050::get_fifo_byte() const noexcept
