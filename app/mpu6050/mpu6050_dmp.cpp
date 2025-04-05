@@ -207,34 +207,24 @@ namespace MPU6050 {
             [this](Quat3D<std::int32_t> const& raw) { return static_cast<Quat3D<std::float32_t>>(raw) / QUAT_SCALE; });
     }
 
-    std::optional<Vec3D<std::float32_t>> MPU6050_DMP::get_gravity() const noexcept
-    {
-        return this->get_quaternion_scaled().transform(
-            [](Quat3D<std::float32_t> const& quaternion) { return Utility::quaternion_to_gravity(quaternion); });
-    }
-
     std::optional<std::float32_t> MPU6050_DMP::get_roll() const noexcept
     {
-        return this->get_quaternion_scaled().transform(
-            [](Quat3D<std::float32_t> const& quaternion) { return Utility::quaternion_to_roll(quaternion); });
+        return this->get_quaternion_scaled().transform(&Utility::quaternion_to_roll<std::float32_t>);
     }
 
     std::optional<std::float32_t> MPU6050_DMP::get_pitch() const noexcept
     {
-        return this->get_quaternion_scaled().transform(
-            [](Quat3D<std::float32_t> const& quaternion) { return Utility::quaternion_to_pitch(quaternion); });
+        return this->get_quaternion_scaled().transform(&Utility::quaternion_to_pitch<std::float32_t>);
     }
 
     std::optional<std::float32_t> MPU6050_DMP::get_yaw() const noexcept
     {
-        return this->get_quaternion_scaled().transform(
-            [](Quat3D<std::float32_t> const& quaternion) { return Utility::quaternion_to_yaw(quaternion); });
+        return this->get_quaternion_scaled().transform(&Utility::quaternion_to_yaw<std::float32_t>);
     }
 
     std::optional<Vec3D<std::float32_t>> MPU6050_DMP::get_roll_pitch_yaw() const noexcept
     {
-        return this->get_quaternion_scaled().transform(
-            [](Quat3D<std::float32_t> const& quaternion) { return Utility::quaternion_to_roll_pitch_yaw(quaternion); });
+        return this->get_quaternion_scaled().transform(&Utility::quaternion_to_roll_pitch_yaw<std::float32_t>);
     }
 
     void MPU6050_DMP::set_int_pll_ready_enabled(bool const enabled) const noexcept
@@ -426,5 +416,4 @@ namespace MPU6050 {
     {
         this->mpu6050_.write_byte(std::to_underlying(RA::DMP_CFG_2), config);
     }
-
 }; // namespace MPU6050

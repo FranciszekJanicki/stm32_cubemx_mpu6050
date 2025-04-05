@@ -28,10 +28,10 @@ namespace MPU6050 {
         std::optional<std::float32_t> get_yaw() const noexcept;
         std::optional<Vec3D<std::float32_t>> get_roll_pitch_yaw() const noexcept;
 
+        std::optional<Quat3D<std::float32_t>> get_quaternion_scaled() const noexcept;
+
     private:
         std::optional<Quat3D<std::int32_t>> get_quaternion_raw() const noexcept;
-        std::optional<Quat3D<std::float32_t>> get_quaternion_scaled() const noexcept;
-        std::optional<Vec3D<std::float32_t>> get_gravity() const noexcept;
 
         void initialize() noexcept;
         void initialize_dmp() const noexcept;
