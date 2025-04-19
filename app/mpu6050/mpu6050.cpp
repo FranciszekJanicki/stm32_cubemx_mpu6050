@@ -209,8 +209,8 @@ namespace MPU6050 {
         this->set_interrupt_latch(IntLatch::PULSE50US);
         this->set_interrupt_latch_clear(IntClear::STATUSREAD);
         this->set_interrupt_drive(IntDrive::PUSHPULL);
-        this->set_interrupt_mode(IntMode::ACTIVELOW);
-        this->set_int_data_ready_enabled(false);
+        this->set_interrupt_mode(IntMode::ACTIVEHIGH);
+        // this->set_int_data_ready_enabled(true);
     }
 
     void MPU6050::initialize_motion_interrupt() const noexcept
@@ -232,7 +232,7 @@ namespace MPU6050 {
     {
         this->set_free_fall_detection_duration(2);
         this->set_free_fall_detection_threshold(5);
-        // this->set_int_free_fall_enabled(true);
+        this->set_int_free_fall_enabled(true);
     }
 
     void MPU6050::deinitialize() noexcept
